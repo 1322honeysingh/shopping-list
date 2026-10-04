@@ -109,71 +109,43 @@ function render(){
   const list=$("list"); list.innerHTML="";
   const shown=items.filter(x=>filter==="all" || x.status===filter);
   if(!shown.length){list.innerHTML='<p class="small">No items here yet.</p>';return}
-
   shown.forEach(x=>{
     const el=document.createElement("div");
     el.className="item "+(x.status==="purchased"?"done":"");
-
-    const text=document.createElement("div");
-    text.className="text";
-
-    const strong=document.createElement("strong");
-    strong.textContent=x.name;
-    text.appendChild(strong);
+    const text=document.createElement("div"); text.className="text";
+    const strong=document.createElement("strong"); strong.textContent=x.name; text.appendChild(strong);
 
     const total=parseInt(x.quantity,10);
-    const bought=Number.isFinite(Number(x.purchasedQty)) ? Number(x.purchasedQty) : (x.status==="purchased" ? total : 0);
-    const pending=Math.max((Number.isFinite(total)?total:0)-bought,0);
+    const valid=Number.isFinite(total)&&total>=0;
+    const boughtRaw=Number(x.purchasedQty);
+    const bought=Number.isFinite(boughtRaw)?Math.max(0,Math.min(boughtRaw,total)):(x.status==="purchased"?total:0);
+    const pending=valid?Math.max(total-bought,0):0;
 
     if(x.quantity){
-      const q=document.createElement("div");
-      q.className="small";
-      q.textContent=Number.isFinite(total)
-        ? `Total: ${total} · Purchased: ${bought} · Pending: ${pending}`
-        : `Qty: ${x.quantity}`;
+      const q=document.createElement("div"); q.className="small";
+      q.textContent=valid?`Total: ${total} · Purchased: ${bought} · Pending: ${pending}`:`Qty: ${x.quantity}`;
       text.appendChild(q);
     }
 
-    const controls=document.createElement("div");
-    controls.className="row";
-
-    const boughtInput=document.createElement("input");
-    boughtInput.type="number";
-    boughtInput.min="0";
-    if(Number.isFinite(total)) boughtInput.max=String(total);
-    boughtInput.value=String(bought);
-    boughtInput.placeholder="Purchased qty";
-    boughtInput.style.maxWidth="150px";
-
-    const updateBtn=document.createElement("button");
-    updateBtn.textContent="Update";
-    updateBtn.className="primary";
-
-    updateBtn.onclick=async()=>{
-      if(!Number.isFinite(total)){
-        message("Please use a numeric total quantity for partial purchase tracking.");
-        return;
-      }
-      const next=Math.min(Math.max(parseInt(boughtInput.value,10)||0,0),total);
-      const nextStatus=next===0 ? "pending" : (next===total ? "purchased" : "partial");
-      await updateDoc(doc(db,"users",user.uid,"items",x.id),{
-        purchasedQty:next,
-        status:nextStatus
-      });
-    };
-
-    controls.append(boughtInput,updateBtn);
-
-    const del=document.createElement("button");
-    del.className="danger";
-    del.textContent="Delete";
+    const controls=document.createElement("div"); controls.className="row";
+    if(valid){
+      const input=document.createElement("input");
+      input.type="number"; input.min="0"; input.max=String(total); input.value=String(bought);
+      input.placeholder="Purchased quantity"; input.style.maxWidth="160px";
+      const update=document.createElement("button"); update.textContent="Update"; update.className="primary";
+      update.onclick=async()=>{
+        const next=Math.max(0,Math.min(parseInt(input.value,10)||0,total));
+        const status=next===total?"purchased":"pending";
+        await updateDoc(doc(db,"users",user.uid,"items",x.id),{purchasedQty:next,status});
+      };
+      controls.append(input,update);
+    }
+    const del=document.createElement("button"); del.className="danger"; del.textContent="Delete";
     del.onclick=()=>deleteDoc(doc(db,"users",user.uid,"items",x.id));
-
     el.append(text,controls,del);
+
     if(x.status==="partial"){
-      const badge=document.createElement("div");
-      badge.className="small";
-      badge.textContent="Partially purchased";
+      const badge=document.createElement("div"); badge.className="small"; badge.textContent="Partial purchase";
       el.appendChild(badge);
     }
     list.appendChild(el);

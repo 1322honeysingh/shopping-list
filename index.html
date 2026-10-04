@@ -1,199 +1,240 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>My Shopping List</title>
-  <style>
-    *{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f5f7fb;color:#172033}
-    .wrap{max-width:620px;margin:auto;padding:18px}.card{background:#fff;border-radius:18px;padding:18px;box-shadow:0 8px 28px #00000012;margin-bottom:14px}
-    h1{margin:0 0 6px;font-size:28px}p{color:#667085}.row{display:flex;gap:8px;flex-wrap:wrap}
-    input,button{font:inherit;border-radius:12px;padding:12px;border:1px solid #d0d5dd}input{flex:1;min-width:120px}
-    button{cursor:pointer;background:#fff}.primary{background:#172033;color:#fff;border-color:#172033}.danger{color:#b42318}
-    .filters button.active{background:#e8eefc}.item{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #eee}
-    .item:last-child{border-bottom:0}.item .text{flex:1}.done .text{text-decoration:line-through;color:#98a2b3}
-    .small{font-size:13px;color:#667085}.hidden{display:none}#msg{font-size:14px}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My Shopping List</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f5f7fb;color:#172033}
+.wrap{max-width:1050px;margin:auto;padding:18px}
+.card{background:#fff;border-radius:18px;padding:18px;box-shadow:0 8px 28px #00000012;margin-bottom:14px}
+h1{margin:0 0 6px;font-size:28px}
+p{color:#667085}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+input,button{font:inherit;border-radius:12px;padding:12px;border:1px solid #d0d5dd}
+input{min-width:120px}
+button{cursor:pointer;background:#fff}
+.primary{background:#172033;color:#fff;border-color:#172033}
+.hidden{display:none!important}
+.small{font-size:13px;color:#667085}
+#msg{font-size:14px}
+.top{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.stat{padding:15px;border-radius:16px;background:#f8fafc}
+.stat b{display:block;font-size:24px;margin-top:3px}
+.tools{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.tool{padding:16px;border-radius:16px}
+.manual{background:#eef6ff}
+.pdf{background:#eefbf2}
+.filters{display:flex;gap:8px;flex-wrap:wrap}
+.filters button.active{background:#172033;color:#fff}
+.search{flex:1;min-width:180px}
+.table{overflow:auto}
+.item{display:grid;grid-template-columns:minmax(180px,1.7fr) 110px 125px 110px 210px;align-items:center;gap:10px;padding:11px 8px;border-bottom:1px solid #eee}
+.item.head{font-weight:700;background:#f8fafc;border-radius:12px}
+.item:last-child{border-bottom:0}
+.emoji{font-size:22px;margin-right:7px}
+.qty{text-align:center;font-weight:650}
+.purchased-input{width:100%}
+.remaining{font-weight:700;text-align:center;padding:7px 10px;border-radius:9px;background:#fff0f0;color:#b42318}
+.actions{display:flex;gap:6px;justify-content:flex-end}
+.actions button{padding:9px 10px}
+.success{background:#e9f8ef;border-color:#b7e4c7}
+.danger{color:#b42318}
+.grand{background:#eaf8ef;text-align:center;font-size:19px;font-weight:700}
+.drop{border:2px dashed #9fb4a4;border-radius:14px;padding:22px;text-align:center}
+@media(max-width:800px){
+ .summary{grid-template-columns:repeat(2,1fr)}
+ .tools{grid-template-columns:1fr}
+ .item{grid-template-columns:1.5fr 80px 105px 85px}
+ .item .actions{grid-column:1/-1;justify-content:flex-start}
+ .item.head{display:none}
+}
+</style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>My Shopping List</h1>
-    <p id="userText">Sign in to keep your list synced across devices.</p>
-    <button id="login" class="primary">Continue with Google</button>
-    <button id="logout" class="hidden">Sign out</button>
+    <div class="top">
+      <div>
+        <h1>🛒 My Shopping List</h1>
+        <p id="userText">Sign in to keep your list synced across devices.</p>
+      </div>
+      <div>
+        <button id="login" class="primary">Continue with Google</button>
+        <button id="logout" class="hidden">Sign out</button>
+      </div>
+    </div>
     <div id="msg"></div>
   </div>
 
   <div id="app" class="hidden">
-    <div class="card">
-      <div class="row">
-        <input id="name" placeholder="Item name" autocomplete="off">
-        <input id="qty" placeholder="Quantity" style="max-width:130px">
-        <button id="add" class="primary">Add</button>
-      </div>
-      <div class="row" style="margin-top:10px">
-        <input id="addToExistingName" placeholder="Existing item name" autocomplete="off">
-        <input id="addToExistingQty" type="number" min="0" placeholder="Add quantity" style="max-width:130px">
-        <button id="addToExisting">Add to existing</button>
-      </div>
-      <div class="card" style="margin-top:14px;padding:14px">
-        <strong>Import from PDF</strong>
-        <p class="small">Upload your sample PDF to extract the item list. You can also type or edit the extracted text before importing.</p>
-        <input id="pdfFile" type="file" accept="application/pdf">
-        <textarea id="pdfText" placeholder="PDF text will appear here..." style="width:100%;min-height:180px;margin-top:10px;resize:vertical"></textarea>
-        <div class="row" style="margin-top:10px">
-          <button id="importPdfText" class="primary">Import PDF items</button>
-          <button id="clearPdf">Clear</button>
+    <div class="tools">
+      <div class="card tool manual">
+        <h2>✏️ Add Item Manually</h2>
+        <div class="row">
+          <input id="name" placeholder="Item name (e.g. Tomato)" autocomplete="off">
+          <input id="qty" placeholder="Quantity" type="number" min="1" step="1" style="max-width:140px">
+          <button id="add" class="primary">＋ Add Item</button>
         </div>
-        <div id="pdfMsg" class="small" style="margin-top:8px"></div>
+        <p class="small">If the item already exists, its quantity is increased instead of creating a duplicate.</p>
+      </div>
+
+      <div class="card tool pdf">
+        <h2>📄 Upload from PDF</h2>
+        <p class="small">Upload a shopping/produce PDF. Items and quantities are imported and combined with existing items.</p>
+        <div class="drop">
+          <input id="pdfFile" type="file" accept="application/pdf">
+          <div id="pdfStatus" class="small">Choose a PDF file</div>
+        </div>
+        <button id="importPdf" class="primary" style="margin-top:10px" disabled>Import PDF to List</button>
       </div>
     </div>
+
+    <div class="card summary">
+      <div class="stat">Total Items<b id="totalItems">0</b></div>
+      <div class="stat">Total Quantity<b id="totalQty">0</b></div>
+      <div class="stat">Pending Items<b id="pendingItems">0</b></div>
+      <div class="stat">Purchased Items<b id="purchasedItems">0</b></div>
+    </div>
+
     <div class="card">
-      <div class="row filters">
-        <button data-filter="all" class="active">All</button>
-        <button data-filter="pending">Pending</button>
-        <button data-filter="purchased">Purchased</button>
+      <div class="row" style="align-items:center">
+        <div class="filters">
+          <button data-filter="all" class="active">All</button>
+          <button data-filter="pending">Pending</button>
+          <button data-filter="purchased">Purchased</button>
+        </div>
+        <input id="search" class="search" placeholder="Search items...">
+        <select id="sort" style="padding:12px;border:1px solid #d0d5dd;border-radius:12px">
+          <option value="az">Sort A → Z</option>
+          <option value="za">Sort Z → A</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card table">
+      <div class="item head">
+        <div>Item</div><div class="qty">Quantity</div><div>Purchased</div><div>Remaining</div><div>Actions</div>
       </div>
       <div id="list"></div>
     </div>
+
+    <div class="card grand">🧮 Grand Total Quantity: <span id="grandTotal">0</span></div>
   </div>
 </div>
 
 <script type="module">
-import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDl3SiPGZmBuXbn_BussDlQLC3h2Xly5aY",
-  authDomain: "myshoppinglist-fa482.firebaseapp.com",
-  projectId: "myshoppinglist-fa482",
-  storageBucket: "myshoppinglist-fa482.firebasestorage.app",
-  messagingSenderId: "1029848940557",
-  appId: "1:1029848940557:web:0b59a54f290a449e291544",
-  measurementId: "G-QDGQ26LX5H"
+const firebaseConfig={
+ apiKey:"AIzaSyDl3SiPGZmBuXbn_BussDlQLC3h2XlyaY",
+ authDomain:"myshoppinglist-fa482.firebaseapp.com",
+ projectId:"myshoppinglist-fa482",
+ storageBucket:"myshoppinglist-fa482.firebasestorage.app",
+ messagingSenderId:"1029848940557",
+ appId:"1:1029848940557:web:0b59a54f290a449e291544",
+ measurementId:"G-QDGQ26LX5H"
 };
-
-const fb = initializeApp(firebaseConfig);
-const auth = getAuth(fb);
-const db = getFirestore(fb);
-const provider = new GoogleAuthProvider();
-let user=null, items=[], filter="all", stop=null;
+const fb=initializeApp(firebaseConfig),auth=getAuth(fb),db=getFirestore(fb),provider=new GoogleAuthProvider();
+let user=null,items=[],filter="all",stop=null,pdfReady=false;
 
 const $=id=>document.getElementById(id);
-function message(t){$("msg").textContent=t||""}
-$("login").onclick=async()=>{
-  message("");
-  try { await signInWithPopup(auth,provider); }
-  catch(e){
-    if(e.code==="auth/popup-blocked" || e.code==="auth/cancelled-popup-request") await signInWithRedirect(auth,provider);
-    else message("Sign-in error: "+e.message);
-  }
+const emojiFor=name=>{
+ const n=name.toLowerCase();
+ if(/apple|mango|papaya|banana|orange|lemon|lime|guava|pineapple|watermelon|lychee|plum|date|clementine|avocado|passion|soursop|coconut|tamarind|kiwi|fruit/.test(n))return"🍎";
+ if(/carrot|cucumber|cabbage|spinach|lettuce|broccoli|okra|peas|beans|green|capsicum|pepper|chilli|plantain|coriander|parsley|mint|thyme|dill|methi|mooli|ravaya|tom|onion|garlic|ginger/.test(n))return"🥬";
+ if(/pot|yam|cassava|cocoyam|dasheen|eddoe|beetroot|radish/.test(n))return"🥔";
+ if(/fish|cod|saltfish|mackerel/.test(n))return"🐟";
+ if(/bread|paneer/.test(n))return"🍞";
+ return"🛒";
 };
+function message(t){$("msg").textContent=t||""}
+function num(v){const m=String(v??"").match(/-?\\d+(?:\\.\\d+)?/);return m?Number(m[0]):0}
+function qtyText(v){return String(v??"").trim()||"0"}
+
+$("login").onclick=async()=>{message("");try{await signInWithPopup(auth,provider)}catch(e){if(e.code==="auth/popup-blocked"||e.code==="auth/cancelled-popup-request")await signInWithRedirect(auth,provider);else message("Sign-in error: "+e.message)}};
 $("logout").onclick=()=>signOut(auth);
 
 onAuthStateChanged(auth,u=>{
-  user=u;
-  $("login").classList.toggle("hidden",!!u);
-  $("logout").classList.toggle("hidden",!u);
-  $("app").classList.toggle("hidden",!u);
-  $("userText").textContent=u ? `Signed in as ${u.displayName||u.email}` : "Sign in to keep your list synced across devices.";
-  if(stop){stop();stop=null}
-  if(u) listen();
-  else {items=[];render()}
+ user=u;$("login").classList.toggle("hidden",!!u);$("logout").classList.toggle("hidden",!u);$("app").classList.toggle("hidden",!u);
+ $("userText").textContent=u?`Signed in as ${u.displayName||u.email}`:"Sign in to keep your list synced across devices.";
+ if(stop){stop();stop=null} if(u)listen();else{items=[];render()}
 });
 
 function listen(){
-  const ref=collection(db,"users",user.uid,"items");
-  const q=query(ref,orderBy("createdAt","desc"));
-  stop=onSnapshot(q,s=>{items=s.docs.map(d=>({id:d.id,...d.data()}));render()},e=>message("Database error: "+e.message));
+ const ref=collection(db,"users",user.uid,"items"),q=query(ref,orderBy("createdAt","desc"));
+ stop=onSnapshot(q,s=>{items=s.docs.map(d=>({id:d.id,...d.data()}));render()},e=>message("Database error: "+e.message));
 }
-$("add").onclick=async()=>{
-  const name=$("name").value.trim(), quantity=$("qty").value.trim();
-  if(!user||!name)return;
-  await addDoc(collection(db,"users",user.uid,"items"),{name,quantity,status:"pending",purchasedQty:0,createdAt:serverTimestamp()});
-  $("name").value="";$("qty").value="";
-};
+function existing(name){return items.find(x=>x.name.trim().toLowerCase()===name.trim().toLowerCase())}
+async function addOrIncrease(name,quantity){
+ if(!user||!name)return;
+ const q=Math.max(0,num(quantity));
+ if(!q)return;
+ const old=existing(name);
+ if(old) await updateDoc(doc(db,"users",user.uid,"items",old.id),{quantity:num(old.quantity)+q,status:"pending"});
+ else await addDoc(collection(db,"users",user.uid,"items"),{name:name.trim(),quantity:q,purchased:0,status:"pending",createdAt:serverTimestamp()});
+}
+$("add").onclick=async()=>{await addOrIncrease($("name").value,$("qty").value);$("name").value="";$("qty").value=""};
 
-$("addToExisting").onclick=async()=>{
-  const name=$("addToExistingName").value.trim();
-  const extra=parseInt($("addToExistingQty").value,10);
-  if(!user||!name||!Number.isFinite(extra)||extra<=0)return;
-  const found=items.find(x=>String(x.name||"").trim().toLowerCase()===name.toLowerCase());
-  if(!found){$("pdfMsg").textContent="Item not found. Add it first, then add quantity.";return;}
-  const current=parseInt(found.quantity,10);
-  const total=Number.isFinite(current)?current:0;
-  await updateDoc(doc(db,"users",user.uid,"items",found.id),{quantity:String(total+extra),status:"pending"});
-  $("addToExistingName").value="";$("addToExistingQty").value="";
-};
+document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));render()});
+$("search").oninput=render;$("sort").onchange=render;
 
-$("pdfFile").onchange=async()=>{
-  const file=$("pdfFile").files[0];
-  if(!file)return;
-  $("pdfMsg").textContent="Reading PDF…";
-  try{
-    const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
-    let out=[];
-    for(let p=1;p<=pdf.numPages;p++){
-      const page=await pdf.getPage(p);
-      const content=await page.getTextContent();
-      out.push(content.items.map(i=>i.str).join(" "));
-    }
-    $("pdfText").value=out.join("\n\n");
-    $("pdfMsg").textContent=`Extracted text from ${pdf.numPages} page${pdf.numPages===1?"":"s"}.`;
-  }catch(e){$("pdfMsg").textContent="Could not read PDF: "+e.message;}
-};
-
-$("clearPdf").onclick=()=>{
-  $("pdfFile").value="";$("pdfText").value="";$("pdfMsg").textContent="";
-};
-
-$("importPdfText").onclick=async()=>{
-  if(!user){$("pdfMsg").textContent="Please sign in first.";return;}
-  const lines=$("pdfText").value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-  let count=0;
-  for(const line of lines){
-    const m=line.match(/^(.*?)(?:\s+)(\d+(?:[+\s]\d+)*)$/);
-    const name=(m?m[1]:line).trim();
-    const quantity=m?m[2].replace(/\s+/g,""):"";
-    if(!name)continue;
-    const existing=items.find(x=>String(x.name||"").trim().toLowerCase()===name.toLowerCase());
-    if(existing){
-      const nums=(String(existing.quantity||"").match(/\d+(?:\.\d+)?/g)||[]).map(Number);
-      const oldTotal=nums.reduce((a,b)=>a+b,0);
-      const addNums=(quantity.match(/\d+(?:\.\d+)?/g)||[]).map(Number);
-      const addTotal=addNums.reduce((a,b)=>a+b,0);
-      await updateDoc(doc(db,"users",user.uid,"items",existing.id),{quantity:String(oldTotal+addTotal),status:"pending"});
-    }else{
-      await addDoc(collection(db,"users",user.uid,"items"),{name,quantity,status:"pending",purchasedQty:0,createdAt:serverTimestamp()});
-    }
-    count++;
-  }
-  $("pdfMsg").textContent=`Imported ${count} item${count===1?"":"s"}. Existing items were increased instead of duplicated.`;
-};
-document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
-  filter=b.dataset.filter;
-  document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));
-  render();
-});
+async function setPurchased(x,val){
+ const total=num(x.quantity),p=Math.max(0,Math.min(total,num(val)));
+ await updateDoc(doc(db,"users",user.uid,"items",x.id),{purchased:p,status:p>=total?"purchased":"pending"});
+}
+async function addQty(x){
+ const extra=prompt("How many more to add?", "1"); if(extra===null)return;
+ const q=num(extra);if(q<=0)return;
+ await updateDoc(doc(db,"users",user.uid,"items",x.id),{quantity:num(x.quantity)+q,status:"pending"});
+}
 function render(){
-  const list=$("list"); list.innerHTML="";
-  const shown=items.filter(x=>filter==="all" || x.status===filter);
-  if(!shown.length){list.innerHTML='<p class="small">No items here yet.</p>';return}
-  shown.forEach(x=>{
-    const el=document.createElement("div"); el.className="item "+(x.status==="purchased"?"done":"");
-    const check=document.createElement("input"); check.type="checkbox"; check.checked=x.status==="purchased";
-    check.onchange=()=>updateDoc(doc(db,"users",user.uid,"items",x.id),{status:check.checked?"purchased":"pending"});
-    const text=document.createElement("div"); text.className="text";
-    const strong=document.createElement("strong"); strong.textContent=x.name; text.appendChild(strong);
-    if(x.quantity){const q=document.createElement("div");q.className="small";q.textContent="Qty: "+x.quantity;text.appendChild(q)}
-    const del=document.createElement("button");del.className="danger";del.textContent="Delete";
-    del.onclick=()=>deleteDoc(doc(db,"users",user.uid,"items",x.id));
-    el.append(check,text,del);list.appendChild(el);
-  });
+ const list=$("list");list.innerHTML="";
+ let shown=[...items].filter(x=>filter==="all"||x.status===filter);
+ const s=$("search").value.trim().toLowerCase();
+ if(s)shown=shown.filter(x=>x.name.toLowerCase().includes(s));
+ shown.sort((a,b)=>{const c=a.name.localeCompare(b.name,undefined,{sensitivity:"base"});return $("sort").value==="az"?c:-c});
+ let total=0,pending=0,purchased=0;
+ items.forEach(x=>{total+=num(x.quantity);if(x.status==="purchased")purchased++;else pending++});
+ $("totalItems").textContent=items.length;$("totalQty").textContent=total;$("grandTotal").textContent=total;$("pendingItems").textContent=pending;$("purchasedItems").textContent=purchased;
+ if(!shown.length){list.innerHTML='<p class="small">No items here yet.</p>';return}
+ shown.forEach(x=>{
+   const totalQ=num(x.quantity),p=Math.max(0,Math.min(totalQ,num(x.purchased))),rem=Math.max(0,totalQ-p);
+   const el=document.createElement("div");el.className="item";
+   const name=document.createElement("div");name.innerHTML=`<span class="emoji">${emojiFor(x.name)}</span><strong></strong>`;name.querySelector("strong").textContent=x.name;
+   const q=document.createElement("div");q.className="qty";q.textContent=qtyText(x.quantity);
+   const pi=document.createElement("input");pi.className="purchased-input";pi.type="number";pi.min="0";pi.max=String(totalQ);pi.value=p;
+   const r=document.createElement("div");r.className="remaining";r.textContent=rem;
+   const actions=document.createElement("div");actions.className="actions";
+   const up=document.createElement("button");up.className="success";up.textContent="✓";up.title="Update purchased";up.onclick=()=>setPurchased(x,pi.value);
+   const del=document.createElement("button");del.className="danger";del.textContent="🗑";del.onclick=()=>deleteDoc(doc(db,"users",user.uid,"items",x.id));
+   const add=document.createElement("button");add.textContent="＋ Add Qty";add.onclick=()=>addQty(x);
+   actions.append(up,del,add);el.append(name,q,pi,r,actions);list.appendChild(el);
+ });
 }
+
+$("pdfFile").onchange=()=>{pdfReady=!!$("pdfFile").files[0];$("pdfStatus").textContent=pdfReady?$("pdfFile").files[0].name:"Choose a PDF file";$("importPdf").disabled=!pdfReady};
+$("importPdf").onclick=async()=>{
+ const file=$("pdfFile").files[0];if(!file||!user)return;
+ $("importPdf").disabled=true;$("pdfStatus").textContent="Reading PDF…";
+ try{
+   const data=await file.arrayBuffer(),pdf=await pdfjsLib.getDocument({data}).promise;let text="";
+   for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p),c=await page.getTextContent();text+=c.items.map(i=>i.str).join(" ")+"\\n"}
+   const lines=text.split(/\\n+/).map(x=>x.trim()).filter(Boolean);let added=0;
+   for(const line of lines){
+     const m=line.match(/^(.+?)\\s+(\\d+(?:\\s*\\+\\s*\\d+)*)\\s*$/);if(!m)continue;
+     const q=m[2].split("+").reduce((a,v)=>a+Number(v.trim()),0);if(q>0){await addOrIncrease(m[1],q);added++}
+   }
+   $("pdfStatus").textContent=`Imported ${added} item lines`;message("PDF import complete.");
+ }catch(e){$("pdfStatus").textContent="PDF import failed";message("PDF error: "+e.message)}
+ $("importPdf").disabled=false;
+};
 </script>
 </body>
 </html>

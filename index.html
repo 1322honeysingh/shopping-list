@@ -10,8 +10,7 @@
     h1{margin:0 0 6px;font-size:28px}p{color:#667085}.row{display:flex;gap:8px;flex-wrap:wrap}
     input,button{font:inherit;border-radius:12px;padding:12px;border:1px solid #d0d5dd}input{flex:1;min-width:120px}
     button{cursor:pointer;background:#fff}.primary{background:#172033;color:#fff;border-color:#172033}.danger{color:#b42318}
-    .filters button.active{background:#e8eefc}.item{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #eee}
-    .item:last-child{border-bottom:0}.item .text{flex:1}.done .text{text-decoration:line-through;color:#98a2b3}
+    .filters button.active{background:#e8eefc}.item{display:grid;grid-template-columns:minmax(0,1fr) 110px minmax(180px,auto);align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid #eee}.item:last-child{border-bottom:0}.item-name{font-weight:700;font-size:17px}.item-qty{text-align:center;font-weight:700}.item-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px}.purchase-input{width:70px;min-width:70px;padding:9px}.compact-btn{padding:9px 11px;font-size:14px}.status{font-size:12px;padding:6px 9px;border-radius:999px;background:#fff0c2;color:#8a5a00}.status.purchased{background:#d8f5df;color:#146b2e}.done .item-name{text-decoration:line-through;color:#98a2b3}@media(max-width:600px){.item{grid-template-columns:minmax(0,1fr) 75px;gap:8px}.item-actions{grid-column:1/-1;justify-content:flex-end}.item-qty{text-align:right}}
     .small{font-size:13px;color:#667085}.hidden{display:none}#msg{font-size:14px}
   </style>
 </head>
@@ -97,8 +96,11 @@ $("add").onclick=async()=>{
   const name=$("name").value.trim(), quantity=$("qty").value.trim();
   if(!user||!name)return;
   const total=parseInt(quantity,10);
-  const purchasedQty=Number.isFinite(total) && total>=0 ? 0 : 0;
-  await addDoc(collection(db,"users",user.uid,"items"),{name,quantity,status:"pending",purchasedQty,createdAt:serverTimestamp()});
+  await addDoc(collection(db,"users",user.uid,"items"),{
+    name, quantity, status:"pending",
+    purchasedQty: Number.isFinite(total) && total>=0 ? 0 : 0,
+    createdAt:serverTimestamp()
+  });
   $("name").value="";$("qty").value="";
 };
 document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
@@ -108,81 +110,79 @@ document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
 });
 function render(){
   const list=$("list"); list.innerHTML="";
-  const shown=items.filter(x=>{
-    if(filter==="all") return true;
-    if(filter==="purchased") return x.status==="purchased";
-    if(filter==="pending") return x.status==="pending" || x.status==="partial";
-    return false;
-  });
+
+  const shown=items
+    .filter(x=>{
+      if(filter==="all") return true;
+      if(filter==="purchased") return x.status==="purchased";
+      if(filter==="pending") return x.status==="pending" || x.status==="partial";
+      return false;
+    })
+    .sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),undefined,{sensitivity:"base"}));
+
   if(!shown.length){list.innerHTML='<p class="small">No items here yet.</p>';return}
 
   shown.forEach(x=>{
     const el=document.createElement("div");
     el.className="item "+(x.status==="purchased"?"done":"");
 
-    const text=document.createElement("div");
-    text.className="text";
-
-    const strong=document.createElement("strong");
-    strong.textContent=x.name;
-    text.appendChild(strong);
+    const name=document.createElement("div");
+    name.className="item-name";
+    name.textContent=x.name;
 
     const total=parseInt(x.quantity,10);
     const validTotal=Number.isFinite(total) && total>=0;
     const rawBought=Number(x.purchasedQty);
-    const bought=validTotal
-      ? Math.max(0,Math.min(Number.isFinite(rawBought)?rawBought:0,total))
-      : 0;
+    const bought=validTotal ? Math.max(0,Math.min(Number.isFinite(rawBought)?rawBought:0,total)) : 0;
     const pending=validTotal ? Math.max(total-bought,0) : 0;
 
-    if(x.quantity){
-      const q=document.createElement("div");
-      q.className="small";
-      q.textContent=validTotal
-        ? `Total: ${total} · Purchased: ${bought} · Pending: ${pending}`
-        : `Qty: ${x.quantity}`;
-      text.appendChild(q);
-    }
+    const qty=document.createElement("div");
+    qty.className="item-qty";
+    qty.textContent=validTotal ? String(total) : (x.quantity || "");
 
-    const controls=document.createElement("div");
-    controls.className="row";
+    const actions=document.createElement("div");
+    actions.className="item-actions";
 
     if(validTotal && x.status!=="purchased"){
-      const boughtInput=document.createElement("input");
-      boughtInput.type="number";
-      boughtInput.min="0";
-      boughtInput.max=String(total);
-      boughtInput.value=String(bought);
-      boughtInput.placeholder="Purchased qty";
-      boughtInput.style.maxWidth="150px";
+      const input=document.createElement("input");
+      input.className="purchase-input";
+      input.type="number";
+      input.min="0";
+      input.max=String(total);
+      input.value=String(bought);
+      input.setAttribute("aria-label","Purchased quantity");
 
-      const updateBtn=document.createElement("button");
-      updateBtn.textContent="Update";
-      updateBtn.className="primary";
-      updateBtn.onclick=async()=>{
-        const next=Math.max(0,Math.min(parseInt(boughtInput.value,10)||0,total));
-        const nextStatus=next>=total ? "purchased" : "pending";
+      const update=document.createElement("button");
+      update.className="primary compact-btn";
+      update.textContent="Update";
+      update.onclick=async()=>{
+        const next=Math.max(0,Math.min(parseInt(input.value,10)||0,total));
         await updateDoc(doc(db,"users",user.uid,"items",x.id),{
           purchasedQty:next,
-          status:nextStatus
+          status:next>=total ? "purchased" : "pending"
         });
       };
-      controls.append(boughtInput,updateBtn);
-    }
 
-    if(x.status==="purchased" && validTotal){
-      const q=document.createElement("div");
-      q.className="small";
-      q.textContent=`Purchased: ${bought} / ${total}`;
-      controls.appendChild(q);
+      actions.append(input,update);
+
+      const status=document.createElement("span");
+      status.className="status";
+      status.textContent=`Pending: ${pending}`;
+      actions.appendChild(status);
+    } else if(validTotal){
+      const status=document.createElement("span");
+      status.className="status purchased";
+      status.textContent="Purchased";
+      actions.appendChild(status);
     }
 
     const del=document.createElement("button");
-    del.className="danger";
+    del.className="danger compact-btn";
     del.textContent="Delete";
     del.onclick=()=>deleteDoc(doc(db,"users",user.uid,"items",x.id));
+    actions.appendChild(del);
 
-    el.append(text,controls,del);
+    el.append(name,qty,actions);
     list.appendChild(el);
   });
 }

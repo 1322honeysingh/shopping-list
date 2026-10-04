@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>My Shopping List</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f5f7fb;color:#172033}
+    .wrap{max-width:620px;margin:auto;padding:18px}.card{background:#fff;border-radius:18px;padding:18px;box-shadow:0 8px 28px #00000012;margin-bottom:14px}
+    h1{margin:0 0 6px;font-size:28px}p{color:#667085}.row{display:flex;gap:8px;flex-wrap:wrap}
+    input,button{font:inherit;border-radius:12px;padding:12px;border:1px solid #d0d5dd}input{flex:1;min-width:120px}
+    button{cursor:pointer;background:#fff}.primary{background:#172033;color:#fff;border-color:#172033}.danger{color:#b42318}
+    .filters button.active{background:#e8eefc}.item{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #eee}
+    .item:last-child{border-bottom:0}.item .text{flex:1}.done .text{text-decoration:line-through;color:#98a2b3}
+    .small{font-size:13px;color:#667085}.hidden{display:none}#msg{font-size:14px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>My Shopping List</h1>
+    <p id="userText">Sign in to keep your list synced across devices.</p>
+    <button id="login" class="primary">Continue with Google</button>
+    <button id="logout" class="hidden">Sign out</button>
+    <div id="msg"></div>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="card">
+      <div class="row">
+        <input id="name" placeholder="Item name" autocomplete="off">
+        <input id="qty" placeholder="Quantity" style="max-width:130px">
+        <button id="add" class="primary">Add</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row filters">
+        <button data-filter="all" class="active">All</button>
+        <button data-filter="pending">Pending</button>
+        <button data-filter="purchased">Purchased</button>
+      </div>
+      <div id="list"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDl3SiPGZmBuXbn_BussDlQLC3h2Xly5aY",
+  authDomain: "myshoppinglist-fa482.firebaseapp.com",
+  projectId: "myshoppinglist-fa482",
+  storageBucket: "myshoppinglist-fa482.firebasestorage.app",
+  messagingSenderId: "1029848940557",
+  appId: "1:1029848940557:web:0b59a54f290a449e291544",
+  measurementId: "G-QDGQ26LX5H"
+};
+
+const fb = initializeApp(firebaseConfig);
+const auth = getAuth(fb);
+const db = getFirestore(fb);
+const provider = new GoogleAuthProvider();
+let user=null, items=[], filter="all", stop=null;
+
+const $=id=>document.getElementById(id);
+function message(t){$("msg").textContent=t||""}
+$("login").onclick=async()=>{
+  message("");
+  try { await signInWithPopup(auth,provider); }
+  catch(e){
+    if(e.code==="auth/popup-blocked" || e.code==="auth/cancelled-popup-request") await signInWithRedirect(auth,provider);
+    else message("Sign-in error: "+e.message);
+  }
+};
+$("logout").onclick=()=>signOut(auth);
+
+onAuthStateChanged(auth,u=>{
+  user=u;
+  $("login").classList.toggle("hidden",!!u);
+  $("logout").classList.toggle("hidden",!u);
+  $("app").classList.toggle("hidden",!u);
+  $("userText").textContent=u ? `Signed in as ${u.displayName||u.email}` : "Sign in to keep your list synced across devices.";
+  if(stop){stop();stop=null}
+  if(u) listen();
+  else {items=[];render()}
+});
+
+function listen(){
+  const ref=collection(db,"users",user.uid,"items");
+  const q=query(ref,orderBy("createdAt","desc"));
+  stop=onSnapshot(q,s=>{items=s.docs.map(d=>({id:d.id,...d.data()}));render()},e=>message("Database error: "+e.message));
+}
+$("add").onclick=async()=>{
+  const name=$("name").value.trim(), quantity=$("qty").value.trim();
+  if(!user||!name)return;
+  await addDoc(collection(db,"users",user.uid,"items"),{name,quantity,status:"pending",createdAt:serverTimestamp()});
+  $("name").value="";$("qty").value="";
+};
+document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
+  filter=b.dataset.filter;
+  document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));
+  render();
+});
+function render(){
+  const list=$("list"); list.innerHTML="";
+  const shown=items.filter(x=>filter==="all" || x.status===filter);
+  if(!shown.length){list.innerHTML='<p class="small">No items here yet.</p>';return}
+  shown.forEach(x=>{
+    const el=document.createElement("div"); el.className="item "+(x.status==="purchased"?"done":"");
+    const check=document.createElement("input"); check.type="checkbox"; check.checked=x.status==="purchased";
+    check.onchange=()=>updateDoc(doc(db,"users",user.uid,"items",x.id),{status:check.checked?"purchased":"pending"});
+    const text=document.createElement("div"); text.className="text";
+    const strong=document.createElement("strong"); strong.textContent=x.name; text.appendChild(strong);
+    if(x.quantity){const q=document.createElement("div");q.className="small";q.textContent="Qty: "+x.quantity;text.appendChild(q)}
+    const del=document.createElement("button");del.className="danger";del.textContent="Delete";
+    del.onclick=()=>deleteDoc(doc(db,"users",user.uid,"items",x.id));
+    el.append(check,text,del);list.appendChild(el);
+  });
+}
+</script>
+</body>
+</html>

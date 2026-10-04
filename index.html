@@ -31,7 +31,7 @@ button{cursor:pointer;background:#fff}
 .filters button.active{background:#172033;color:#fff}
 .search{flex:1;min-width:180px}
 .table{overflow:auto}
-.item{display:grid;grid-template-columns:minmax(170px,1.5fr) 85px 105px 105px 120px 100px 190px;align-items:center;gap:10px;padding:11px 8px;border-bottom:1px solid #eee}
+.item{display:grid;grid-template-columns:minmax(180px,1.7fr) 90px 120px 120px 220px;align-items:center;gap:10px;padding:11px 8px;border-bottom:1px solid #eee}
 .item.head{font-weight:700;background:#f8fafc;border-radius:12px}
 .item:last-child{border-bottom:0}
 .emoji{font-size:22px;margin-right:7px}
@@ -42,8 +42,6 @@ button{cursor:pointer;background:#fff}
 .actions button{padding:9px 10px}
 .success{background:#e9f8ef;border-color:#b7e4c7}
 .danger{color:#b42318}
-.subtotal{font-weight:800;text-align:center;padding:8px 10px;border-radius:10px;background:#eaf8ef;color:#166534}
-.price-input{width:100%;min-width:80px}
 textarea{width:100%;min-height:160px;resize:vertical;font:inherit;border-radius:12px;padding:12px;border:1px solid #d0d5dd;background:#fff}
 .delete-all{background:#ef4444;color:#fff;border-color:#ef4444;font-weight:750}
 .drop{border:2px dashed #9fb4a4;border-radius:14px;padding:22px;text-align:center}
@@ -79,7 +77,6 @@ textarea{width:100%;min-height:160px;resize:vertical;font:inherit;border-radius:
         <div class="row">
           <input id="name" placeholder="Item name (e.g. Tomato)" autocomplete="off">
           <input id="qty" placeholder="Quantity" type="number" min="1" step="1" style="max-width:140px">
-          <input id="price" placeholder="Price each" type="number" min="0" step="0.01" style="max-width:140px">
           <button id="add" class="primary">＋ Add Item</button>
         </div>
         <p class="small">If the item already exists, its quantity is increased instead of creating a duplicate.</p>
@@ -87,15 +84,15 @@ textarea{width:100%;min-height:160px;resize:vertical;font:inherit;border-radius:
 
       <div class="card tool paste">
         <h2>📋 Paste Text</h2>
-        <p class="small">Paste one item per line. Examples: <b>Tomato 3</b> or <b>Tomato 3 2.50</b> (item, quantity, optional price each).</p>
-        <textarea id="pasteText" placeholder="Tomato 3&#10;Banana 6 0.30&#10;Milk 2 1.50"></textarea>
+        <p class="small">Paste one item per line. Example: <b>Tomato 3</b>. You can also use quantities like <b>1+1+2</b>.</p>
+        <textarea id="pasteText" placeholder="Tomato 3&#10;Banana 6&#10;Milk 1+1"></textarea>
         <button id="importText" class="primary" style="margin-top:10px">Add Pasted Text to List</button>
       </div>
     </div>
 
     <div class="card"><div class="small">🌙 The shopping list resets automatically after midnight.</div></div>
 
-    <div class="card"><button id="clearToday" class="delete-all">🗑️ Delete All List</button></div>
+    <div class="card"><button id="clearToday" class="delete-all">🗑️ Delete Entire List</button></div>
 
     <div class="card summary">
       <div class="stat">Total Items (Names)<b id="totalItems">0</b></div>
@@ -121,7 +118,7 @@ textarea{width:100%;min-height:160px;resize:vertical;font:inherit;border-radius:
 
     <div class="card table">
       <div class="item head">
-        <div>Item</div><div class="qty">Qty</div><div>Price Each</div><div>Purchased</div><div>Remaining</div><div>Sub Total</div><div>Actions</div>
+        <div>Item</div><div class="qty">Quantity</div><div>Done Qty</div><div>Remaining</div><div>Actions</div>
       </div>
       <div id="list"></div>
     </div>
@@ -183,7 +180,6 @@ function qtyValue(v){
  const parts=String(v??"").split("+").map(x=>Number(x.trim())).filter(Number.isFinite);
  return parts.length?parts.reduce((a,b)=>a+b,0):num(v);
 }
-function money(v){return "£"+Number(v||0).toFixed(2)}
 
 $("login").onclick=async()=>{message("");try{await signInWithPopup(auth,provider)}catch(e){if(e.code==="auth/popup-blocked"||e.code==="auth/cancelled-popup-request")await signInWithRedirect(auth,provider);else message("Sign-in error: "+e.message)}};
 $("logout").onclick=()=>signOut(auth);
@@ -214,21 +210,23 @@ function listen(){
  },e=>message("Database error: "+e.message));
 }
 function existing(name){return items.find(x=>x.name.trim().toLowerCase()===name.trim().toLowerCase())}
-async function addOrIncrease(name,quantity,price=null){
+async function addOrIncrease(name,quantity){
  if(!user||!name)return;
  const q=Math.max(0,qtyValue(quantity));
  if(!q)return;
- const p=price===null||price===""?null:Math.max(0,num(price));
  const old=existing(name);
  if(old){
-   const data={quantity:qtyValue(old.quantity)+q,status:"pending"};
-   if(p!==null)data.price=p;
-   await updateDoc(doc(db,"users",user.uid,"items",old.id),data);
+   await updateDoc(doc(db,"users",user.uid,"items",old.id),{
+     quantity:qtyValue(old.quantity)+q,
+     status:"pending"
+   });
  } else {
-   await addDoc(collection(db,"users",user.uid,"items"),{name:name.trim(),quantity:q,price:p??0,purchased:0,status:"pending",createdAt:serverTimestamp()});
+   await addDoc(collection(db,"users",user.uid,"items"),{
+     name:name.trim(),quantity:q,purchased:0,status:"pending",createdAt:serverTimestamp()
+   });
  }
 }
-$("add").onclick=async()=>{await addOrIncrease($("name").value,$("qty").value,$("price").value);$("name").value="";$("qty").value="";$("price").value=""};
+$("add").onclick=async()=>{await addOrIncrease($("name").value,$("qty").value);$("name").value="";$("qty").value=""};
 
 document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));render()});
 $("search").oninput=render;$("sort").onchange=render;
@@ -244,12 +242,20 @@ async function addQty(x){
 }
 function render(){
  const list=$("list");list.innerHTML="";
- let shown=[...items].filter(x=>filter==="all"||x.status===filter);
+ let shown=[...items].filter(x=>{
+   const tq=qtyValue(x.quantity), done=Math.max(0,Math.min(tq,num(x.purchased)));
+   const actualStatus=(tq>0 && done>=tq)?"purchased":"pending";
+   return filter==="all"||actualStatus===filter;
+ });
  const s=$("search").value.trim().toLowerCase();
  if(s)shown=shown.filter(x=>x.name.toLowerCase().includes(s));
  shown.sort((a,b)=>{const c=a.name.localeCompare(b.name,undefined,{sensitivity:"base"});return $("sort").value==="az"?c:-c});
  let total=0,pending=0,purchased=0;
- items.forEach(x=>{total+=qtyValue(x.quantity);if(x.status==="purchased")purchased++;else pending++});
+ items.forEach(x=>{
+   const tq=qtyValue(x.quantity), done=Math.max(0,Math.min(tq,num(x.purchased)));
+   total+=tq;
+   if(tq>0 && done>=tq)purchased++; else pending++;
+ });
  $("totalItems").textContent=items.length;$("totalQty").textContent=total;$("pendingItems").textContent=pending;$("purchasedItems").textContent=purchased;
  if(!shown.length){list.innerHTML='<p class="small">No items here yet.</p>';return}
  shown.forEach(x=>{
@@ -257,22 +263,20 @@ function render(){
    const el=document.createElement("div");el.className="item";
    const name=document.createElement("div");name.innerHTML=`<span class="emoji">${emojiFor(x.name)}</span><strong></strong>`;name.querySelector("strong").textContent=x.name;
    const q=document.createElement("div");q.className="qty";q.textContent=qtyText(x.quantity);
-   const price=document.createElement("input");price.className="price-input";price.type="number";price.min="0";price.step="0.01";price.value=Number(x.price||0);
-   price.onchange=()=>updateDoc(doc(db,"users",user.uid,"items",x.id),{price:Math.max(0,num(price.value))});
    const pi=document.createElement("input");pi.className="purchased-input";pi.type="number";pi.min="0";pi.max=String(totalQ);pi.value=p;
    const r=document.createElement("div");r.className="remaining";r.textContent=rem;
-   const sub=document.createElement("div");sub.className="subtotal";sub.textContent=money(totalQ*Number(x.price||0));
    const actions=document.createElement("div");actions.className="actions";
-   const up=document.createElement("button");up.className="success";up.textContent="✓";up.title="Update purchased";up.onclick=()=>setPurchased(x,pi.value);
-   const del=document.createElement("button");del.className="danger";del.textContent="🗑";del.onclick=()=>deleteDoc(doc(db,"users",user.uid,"items",x.id));
+   const save=document.createElement("button");save.className="success";save.textContent="✓ Save Done";save.title="Save completed quantity";
+   save.onclick=()=>setPurchased(x,pi.value);
+   const allDone=document.createElement("button");allDone.textContent="✓ All Done";allDone.onclick=()=>setPurchased(x,totalQ);
    const add=document.createElement("button");add.textContent="＋ Qty";add.onclick=()=>addQty(x);
-   actions.append(up,del,add);el.append(name,q,price,pi,r,sub,actions);list.appendChild(el);
+   actions.append(save,allDone,add);el.append(name,q,pi,r,actions);list.appendChild(el);
  });
 }
 
 $("clearToday").onclick=async()=>{
  if(!user || !items.length){message("There is no list to delete.");return;}
- const ok=confirm("Delete ALL items from today’s shopping list? This cannot be undone.");
+ const ok=confirm("Delete the ENTIRE shopping list? This cannot be undone.");
  if(!ok)return;
  try{
    await Promise.all(items.map(x=>deleteDoc(doc(db,"users",user.uid,"items",x.id))));
@@ -289,12 +293,12 @@ $("importText").onclick=async()=>{
  let added=0;
  for(const line of lines){
    const cleaned=line.replace(/^[•*\-\s]+/,"").trim();
-   const m=cleaned.match(/^(.+?)\s*[-:,\t]?\s+(\d+(?:\s*\+\s*\d+)*)(?:\s+(?:£|₹|\$)?\s*(\d+(?:\.\d{1,2})?))?\s*$/);
+   const m=cleaned.match(/^(.+?)\s*[-:,\t]?\s+(\d+(?:\s*\+\s*\d+)*)\s*$/);
    if(!m)continue;
-   await addOrIncrease(m[1].trim(),m[2],m[3]??null);
+   await addOrIncrease(m[1].trim(),m[2]);
    added++;
  }
- message(added?`Added ${added} item line${added===1?"":"s"} from pasted text.`:"No valid item lines found.");
+ message(added?`Added ${added} item line${added===1?"":"s"} from pasted text.`:"No valid item lines found. Use one item per line, for example: Tomato 3");
  if(added)$("pasteText").value="";
 };
 </script>

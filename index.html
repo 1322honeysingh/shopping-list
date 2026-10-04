@@ -92,9 +92,11 @@ button{cursor:pointer;background:#fff}
       </div>
     </div>
 
+    <div class="card"><div class="small">🌙 The shopping list resets automatically after midnight.</div></div>
+
     <div class="card summary">
-      <div class="stat">Total Items<b id="totalItems">0</b></div>
-      <div class="stat">Total Quantity<b id="totalQty">0</b></div>
+      <div class="stat">Total Items (Names)<b id="totalItems">0</b></div>
+      <div class="stat">Total Quantity (All Items)<b id="totalQty">0</b></div>
       <div class="stat">Pending Items<b id="pendingItems">0</b></div>
       <div class="stat">Purchased Items<b id="purchasedItems">0</b></div>
     </div>
@@ -147,11 +149,32 @@ let user=null,items=[],filter="all",stop=null,pdfReady=false;
 const $=id=>document.getElementById(id);
 const emojiFor=name=>{
  const n=name.toLowerCase();
- if(/apple|mango|papaya|banana|orange|lemon|lime|guava|pineapple|watermelon|lychee|plum|date|clementine|avocado|passion|soursop|coconut|tamarind|kiwi|fruit/.test(n))return"🍎";
- if(/carrot|cucumber|cabbage|spinach|lettuce|broccoli|okra|peas|beans|green|capsicum|pepper|chilli|plantain|coriander|parsley|mint|thyme|dill|methi|mooli|ravaya|tom|onion|garlic|ginger/.test(n))return"🥬";
- if(/pot|yam|cassava|cocoyam|dasheen|eddoe|beetroot|radish/.test(n))return"🥔";
+ if(/avocado/.test(n))return"🥑";
+ if(/apple|custard apple/.test(n))return"🍎";
+ if(/banana|plantain|matoki/.test(n))return"🍌";
+ if(/mango/.test(n))return"🥭";
+ if(/orange|clementine/.test(n))return"🍊";
+ if(/lemon|lime|keylime/.test(n))return"🍋";
+ if(/watermelon/.test(n))return"🍉";
+ if(/pineapple/.test(n))return"🍍";
+ if(/coconut/.test(n))return"🥥";
+ if(/grape/.test(n))return"🍇";
+ if(/lychee|guava|papaya|passion|soursop|kaki|fig|date|tamarind|breadfruit|fruit/.test(n))return"🍈";
+ if(/carrot/.test(n))return"🥕";
+ if(/corn/.test(n))return"🌽";
+ if(/cucumber/.test(n))return"🥒";
+ if(/aub|eggplant|ravaya|garden egg/.test(n))return"🍆";
+ if(/pepper|chilli|chili/.test(n))return"🌶️";
+ if(/tom|tomato/.test(n))return"🍅";
+ if(/onion|garlic/.test(n))return"🧅";
+ if(/pot|yam|cassava|cocoyam|dasheen|eddoe/.test(n))return"🥔";
+ if(/beetroot|mooli|radish/.test(n))return"🫜";
+ if(/cabbage|spinach|lettuce|coriander|parsley|mint|thyme|dill|methi|leek|spring onion|haldi|ginger|okra|beans|guwar|papdi|karela|turia|chow chow|drumstick|pumpkin|greens?/.test(n))return"🥬";
  if(/fish|cod|saltfish|mackerel/.test(n))return"🐟";
- if(/bread|paneer/.test(n))return"🍞";
+ if(/paneer/.test(n))return"🧀";
+ if(/peanut/.test(n))return"🥜";
+ if(/sprout/.test(n))return"🌱";
+ if(/sugarcane/.test(n))return"🎋";
  return"🛒";
 };
 function message(t){$("msg").textContent=t||""}
@@ -167,9 +190,24 @@ onAuthStateChanged(auth,u=>{
  if(stop){stop();stop=null} if(u)listen();else{items=[];render()}
 });
 
+async function deleteExpiredItems(currentItems){
+ const now=new Date();
+ const todayStart=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+ const expired=currentItems.filter(x=>{
+   const t=x.createdAt?.toMillis?.();
+   return t && t<todayStart;
+ });
+ if(expired.length){
+   await Promise.all(expired.map(x=>deleteDoc(doc(db,"users",user.uid,"items",x.id))));
+ }
+}
 function listen(){
  const ref=collection(db,"users",user.uid,"items"),q=query(ref,orderBy("createdAt","desc"));
- stop=onSnapshot(q,s=>{items=s.docs.map(d=>({id:d.id,...d.data()}));render()},e=>message("Database error: "+e.message));
+ stop=onSnapshot(q,async s=>{
+   items=s.docs.map(d=>({id:d.id,...d.data()}));
+   await deleteExpiredItems(items);
+   render();
+ },e=>message("Database error: "+e.message));
 }
 function existing(name){return items.find(x=>x.name.trim().toLowerCase()===name.trim().toLowerCase())}
 async function addOrIncrease(name,quantity){
@@ -218,6 +256,18 @@ function render(){
    actions.append(up,del,add);el.append(name,q,pi,r,actions);list.appendChild(el);
  });
 }
+
+$("clearToday").onclick=async()=>{
+ if(!user || !items.length){message("There is no list to delete.");return;}
+ const ok=confirm("Delete ALL items from today’s shopping list? This cannot be undone.");
+ if(!ok)return;
+ try{
+   await Promise.all(items.map(x=>deleteDoc(doc(db,"users",user.uid,"items",x.id))));
+   message("Today’s shopping list has been deleted.");
+ }catch(e){
+   message("Delete error: "+e.message);
+ }
+};
 
 $("pdfFile").onchange=()=>{pdfReady=!!$("pdfFile").files[0];$("pdfStatus").textContent=pdfReady?$("pdfFile").files[0].name:"Choose a PDF file";$("importPdf").disabled=!pdfReady};
 $("importPdf").onclick=async()=>{

@@ -174,7 +174,7 @@ const emojiFor=name=>{
  return"🛒";
 };
 function message(t){$("msg").textContent=t||""}
-function num(v){const m=String(v??"").match(/-?\\d+(?:\\.\\d+)?/);return m?Number(m[0]):0}
+function num(v){const m=String(v??"").match(/-?\d+(?:\.\d+)?/);return m?Number(m[0]):0}
 function qtyText(v){return String(v??"").trim()||"0"}
 function qtyValue(v){
  const parts=String(v??"").split("+").map(x=>Number(x.trim())).filter(Number.isFinite);
@@ -232,9 +232,9 @@ document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{filter=b.da
 $("search").oninput=render;$("sort").onchange=render;
 
 async function setPurchased(x,val){
- const total=qtyValue(x.quantity);
+ const total=Math.max(0,qtyValue(x.quantity));
  const done=Math.max(0,Math.min(total,num(val)));
- const status=(total>0 && done>=total)?"purchased":"pending";
+ const status=(total>0 && done===total)?"purchased":"pending";
  await updateDoc(doc(db,"users",user.uid,"items",x.id),{purchased:done,status});
 }
 async function addQty(x){
@@ -243,43 +243,39 @@ async function addQty(x){
  await updateDoc(doc(db,"users",user.uid,"items",x.id),{quantity:qtyValue(x.quantity)+q,status:"pending"});
 }
 function render(){
+ const list=$("list");list.innerHTML="";
+ let shown=[...items].filter(x=>{
+   const tq=qtyValue(x.quantity), done=Math.max(0,Math.min(tq,num(x.purchased)));
+   const actualStatus=(tq>0 && done>=tq)?"purchased":"pending";
+   return filter==="all"||actualStatus===filter;
+ });
+ const s=$("search").value.trim().toLowerCase();
+ if(s)shown=shown.filter(x=>x.name.toLowerCase().includes(s));
+ shown.sort((a,b)=>{const c=a.name.localeCompare(b.name,undefined,{sensitivity:"base"});return $("sort").value==="az"?c:-c});
  let total=0,pending=0,purchased=0;
  items.forEach(x=>{
    const tq=qtyValue(x.quantity), done=Math.max(0,Math.min(tq,num(x.purchased)));
    total+=tq;
    if(tq>0 && done>=tq)purchased++; else pending++;
  });
- $("totalItems").textContent=items.length;
- $("totalQty").textContent=total;
- $("pendingItems").textContent=pending;
- $("purchasedItems").textContent=purchased;
-
- let shown=items.filter(x=>{
-   const tq=qtyValue(x.quantity), done=Math.max(0,Math.min(tq,num(x.purchased)));
-   const st=(tq>0 && done>=tq)?"purchased":"pending";
-   return filter==="all" || st===filter;
- });
- const search=($("search").value||"").trim().toLowerCase();
- if(search)shown=shown.filter(x=>(x.name||"").toLowerCase().includes(search));
- if($("sortBtn").dataset.sorted==="yes")shown.sort((a,b)=>(a.name||"").localeCompare(b.name||""));
-
- const list=$("list"); list.innerHTML="";
+ $("totalItems").textContent=items.length;$("totalQty").textContent=total;$("pendingItems").textContent=pending;$("purchasedItems").textContent=purchased;
+ if(!shown.length){list.innerHTML='<p class="small">No items here yet.</p>';return}
  shown.forEach(x=>{
-   const totalQ=qtyValue(x.quantity);
-   const p=Math.max(0,Math.min(totalQ,num(x.purchased)));
-   const rem=Math.max(0,totalQ-p);
-   const done=totalQ>0 && p>=totalQ;
-   const el=document.createElement("div"); el.className="item";
-   const name=document.createElement("div"); name.className="item-name";
-   name.innerHTML=`<span>${emojiFor(x.name)}</span><span>${x.name}<small>${done?"Purchased":"Pending"}</small></span>`;
-   const q=document.createElement("div"); q.className="qty"; q.textContent=qtyText(x.quantity);
-   const pi=document.createElement("input"); pi.className="purchased-input"; pi.type="number"; pi.min="0"; pi.max=String(totalQ); pi.value=p;
-   const r=document.createElement("div"); r.className="remaining"; r.textContent=rem;
-   const actions=document.createElement("div"); actions.className="actions";
-   const save=document.createElement("button"); save.className="success"; save.textContent="✓ Save Done"; save.onclick=()=>setPurchased(x,pi.value);
-   const allDone=document.createElement("button"); allDone.textContent="✓ All Done"; allDone.onclick=()=>setPurchased(x,totalQ);
-   const add=document.createElement("button"); add.textContent="＋ Qty"; add.onclick=()=>addQty(x);
-   actions.append(save,allDone,add); el.append(name,q,pi,r,actions); list.appendChild(el);
+   const totalQ=qtyValue(x.quantity),p=Math.max(0,Math.min(totalQ,num(x.purchased))),rem=Math.max(0,totalQ-p);
+   const el=document.createElement("div");el.className="item";
+   const name=document.createElement("div");
+   const isDone=totalQ>0 && p===totalQ;
+   name.innerHTML=`<span class="emoji">${emojiFor(x.name)}</span><strong></strong><div class="small">${isDone?"Purchased":"Pending"}</div>`;
+   name.querySelector("strong").textContent=x.name;
+   const q=document.createElement("div");q.className="qty";q.textContent=qtyText(x.quantity);
+   const pi=document.createElement("input");pi.className="purchased-input";pi.type="number";pi.min="0";pi.max=String(totalQ);pi.value=p;
+   const r=document.createElement("div");r.className="remaining";r.textContent=rem;
+   const actions=document.createElement("div");actions.className="actions";
+   const save=document.createElement("button");save.className="success";save.textContent="✓ Save Done";save.title="Save completed quantity";
+   save.onclick=()=>setPurchased(x,pi.value);
+   const allDone=document.createElement("button");allDone.textContent="✓ All Done";allDone.onclick=()=>setPurchased(x,totalQ);
+   const add=document.createElement("button");add.textContent="＋ Qty";add.onclick=()=>addQty(x);
+   actions.append(save,allDone,add);el.append(name,q,pi,r,actions);list.appendChild(el);
  });
 }
 

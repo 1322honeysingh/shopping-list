@@ -37,7 +37,6 @@
       <div class="row filters">
         <button data-filter="all" class="active">All</button>
         <button data-filter="pending">Pending</button>
-        <button data-filter="partial">Partial</button>
         <button data-filter="purchased">Purchased</button>
       </div>
       <div id="list"></div>
@@ -97,7 +96,9 @@ function listen(){
 $("add").onclick=async()=>{
   const name=$("name").value.trim(), quantity=$("qty").value.trim();
   if(!user||!name)return;
-  await addDoc(collection(db,"users",user.uid,"items"),{name,quantity,status:"pending",createdAt:serverTimestamp()});
+  const total=parseInt(quantity,10);
+  const purchasedQty=Number.isFinite(total) && total>=0 ? 0 : 0;
+  await addDoc(collection(db,"users",user.uid,"items"),{name,quantity,status:"pending",purchasedQty,createdAt:serverTimestamp()});
   $("name").value="";$("qty").value="";
 };
 document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
@@ -107,47 +108,81 @@ document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
 });
 function render(){
   const list=$("list"); list.innerHTML="";
-  const shown=items.filter(x=>filter==="all" || x.status===filter);
+  const shown=items.filter(x=>{
+    if(filter==="all") return true;
+    if(filter==="purchased") return x.status==="purchased";
+    if(filter==="pending") return x.status==="pending" || x.status==="partial";
+    return false;
+  });
   if(!shown.length){list.innerHTML='<p class="small">No items here yet.</p>';return}
+
   shown.forEach(x=>{
     const el=document.createElement("div");
     el.className="item "+(x.status==="purchased"?"done":"");
-    const text=document.createElement("div"); text.className="text";
-    const strong=document.createElement("strong"); strong.textContent=x.name; text.appendChild(strong);
+
+    const text=document.createElement("div");
+    text.className="text";
+
+    const strong=document.createElement("strong");
+    strong.textContent=x.name;
+    text.appendChild(strong);
 
     const total=parseInt(x.quantity,10);
-    const valid=Number.isFinite(total)&&total>=0;
-    const boughtRaw=Number(x.purchasedQty);
-    const bought=Number.isFinite(boughtRaw)?Math.max(0,Math.min(boughtRaw,total)):(x.status==="purchased"?total:0);
-    const pending=valid?Math.max(total-bought,0):0;
+    const validTotal=Number.isFinite(total) && total>=0;
+    const rawBought=Number(x.purchasedQty);
+    const bought=validTotal
+      ? Math.max(0,Math.min(Number.isFinite(rawBought)?rawBought:0,total))
+      : 0;
+    const pending=validTotal ? Math.max(total-bought,0) : 0;
 
     if(x.quantity){
-      const q=document.createElement("div"); q.className="small";
-      q.textContent=valid?`Total: ${total} · Purchased: ${bought} · Pending: ${pending}`:`Qty: ${x.quantity}`;
+      const q=document.createElement("div");
+      q.className="small";
+      q.textContent=validTotal
+        ? `Total: ${total} · Purchased: ${bought} · Pending: ${pending}`
+        : `Qty: ${x.quantity}`;
       text.appendChild(q);
     }
 
-    const controls=document.createElement("div"); controls.className="row";
-    if(valid){
-      const input=document.createElement("input");
-      input.type="number"; input.min="0"; input.max=String(total); input.value=String(bought);
-      input.placeholder="Purchased quantity"; input.style.maxWidth="160px";
-      const update=document.createElement("button"); update.textContent="Update"; update.className="primary";
-      update.onclick=async()=>{
-        const next=Math.max(0,Math.min(parseInt(input.value,10)||0,total));
-        const status=next===total?"purchased":"pending";
-        await updateDoc(doc(db,"users",user.uid,"items",x.id),{purchasedQty:next,status});
-      };
-      controls.append(input,update);
-    }
-    const del=document.createElement("button"); del.className="danger"; del.textContent="Delete";
-    del.onclick=()=>deleteDoc(doc(db,"users",user.uid,"items",x.id));
-    el.append(text,controls,del);
+    const controls=document.createElement("div");
+    controls.className="row";
 
-    if(x.status==="partial"){
-      const badge=document.createElement("div"); badge.className="small"; badge.textContent="Partial purchase";
-      el.appendChild(badge);
+    if(validTotal && x.status!=="purchased"){
+      const boughtInput=document.createElement("input");
+      boughtInput.type="number";
+      boughtInput.min="0";
+      boughtInput.max=String(total);
+      boughtInput.value=String(bought);
+      boughtInput.placeholder="Purchased qty";
+      boughtInput.style.maxWidth="150px";
+
+      const updateBtn=document.createElement("button");
+      updateBtn.textContent="Update";
+      updateBtn.className="primary";
+      updateBtn.onclick=async()=>{
+        const next=Math.max(0,Math.min(parseInt(boughtInput.value,10)||0,total));
+        const nextStatus=next>=total ? "purchased" : "pending";
+        await updateDoc(doc(db,"users",user.uid,"items",x.id),{
+          purchasedQty:next,
+          status:nextStatus
+        });
+      };
+      controls.append(boughtInput,updateBtn);
     }
+
+    if(x.status==="purchased" && validTotal){
+      const q=document.createElement("div");
+      q.className="small";
+      q.textContent=`Purchased: ${bought} / ${total}`;
+      controls.appendChild(q);
+    }
+
+    const del=document.createElement("button");
+    del.className="danger";
+    del.textContent="Delete";
+    del.onclick=()=>deleteDoc(doc(db,"users",user.uid,"items",x.id));
+
+    el.append(text,controls,del);
     list.appendChild(el);
   });
 }

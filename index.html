@@ -10,7 +10,8 @@
     h1{margin:0 0 6px;font-size:28px}p{color:#667085}.row{display:flex;gap:8px;flex-wrap:wrap}
     input,button{font:inherit;border-radius:12px;padding:12px;border:1px solid #d0d5dd}input{flex:1;min-width:120px}
     button{cursor:pointer;background:#fff}.primary{background:#172033;color:#fff;border-color:#172033}.danger{color:#b42318}
-    .filters button.active{background:#e8eefc}.item{display:grid;grid-template-columns:minmax(0,1fr) 110px minmax(180px,auto);align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid #eee}.item:last-child{border-bottom:0}.item-name{font-weight:700;font-size:17px}.item-qty{text-align:center;font-weight:700}.item-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px}.purchase-input{width:70px;min-width:70px;padding:9px}.compact-btn{padding:9px 11px;font-size:14px}.status{font-size:12px;padding:6px 9px;border-radius:999px;background:#fff0c2;color:#8a5a00}.status.purchased{background:#d8f5df;color:#146b2e}.done .item-name{text-decoration:line-through;color:#98a2b3}@media(max-width:600px){.item{grid-template-columns:minmax(0,1fr) 75px;gap:8px}.item-actions{grid-column:1/-1;justify-content:flex-end}.item-qty{text-align:right}}
+    .filters button.active{background:#e8eefc}.item{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #eee}
+    .item:last-child{border-bottom:0}.item .text{flex:1}.done .text{text-decoration:line-through;color:#98a2b3}
     .small{font-size:13px;color:#667085}.hidden{display:none}#msg{font-size:14px}
   </style>
 </head>
@@ -31,6 +32,22 @@
         <input id="qty" placeholder="Quantity" style="max-width:130px">
         <button id="add" class="primary">Add</button>
       </div>
+      <div class="row" style="margin-top:10px">
+        <input id="addToExistingName" placeholder="Existing item name" autocomplete="off">
+        <input id="addToExistingQty" type="number" min="0" placeholder="Add quantity" style="max-width:130px">
+        <button id="addToExisting">Add to existing</button>
+      </div>
+      <div class="card" style="margin-top:14px;padding:14px">
+        <strong>Import from PDF</strong>
+        <p class="small">Upload your sample PDF to extract the item list. You can also type or edit the extracted text before importing.</p>
+        <input id="pdfFile" type="file" accept="application/pdf">
+        <textarea id="pdfText" placeholder="PDF text will appear here..." style="width:100%;min-height:180px;margin-top:10px;resize:vertical"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button id="importPdfText" class="primary">Import PDF items</button>
+          <button id="clearPdf">Clear</button>
+        </div>
+        <div id="pdfMsg" class="small" style="margin-top:8px"></div>
+      </div>
     </div>
     <div class="card">
       <div class="row filters">
@@ -44,6 +61,7 @@
 </div>
 
 <script type="module">
+import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
@@ -95,13 +113,65 @@ function listen(){
 $("add").onclick=async()=>{
   const name=$("name").value.trim(), quantity=$("qty").value.trim();
   if(!user||!name)return;
-  const total=parseInt(quantity,10);
-  await addDoc(collection(db,"users",user.uid,"items"),{
-    name, quantity, status:"pending",
-    purchasedQty: Number.isFinite(total) && total>=0 ? 0 : 0,
-    createdAt:serverTimestamp()
-  });
+  await addDoc(collection(db,"users",user.uid,"items"),{name,quantity,status:"pending",purchasedQty:0,createdAt:serverTimestamp()});
   $("name").value="";$("qty").value="";
+};
+
+$("addToExisting").onclick=async()=>{
+  const name=$("addToExistingName").value.trim();
+  const extra=parseInt($("addToExistingQty").value,10);
+  if(!user||!name||!Number.isFinite(extra)||extra<=0)return;
+  const found=items.find(x=>String(x.name||"").trim().toLowerCase()===name.toLowerCase());
+  if(!found){$("pdfMsg").textContent="Item not found. Add it first, then add quantity.";return;}
+  const current=parseInt(found.quantity,10);
+  const total=Number.isFinite(current)?current:0;
+  await updateDoc(doc(db,"users",user.uid,"items",found.id),{quantity:String(total+extra),status:"pending"});
+  $("addToExistingName").value="";$("addToExistingQty").value="";
+};
+
+$("pdfFile").onchange=async()=>{
+  const file=$("pdfFile").files[0];
+  if(!file)return;
+  $("pdfMsg").textContent="Reading PDF…";
+  try{
+    const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+    let out=[];
+    for(let p=1;p<=pdf.numPages;p++){
+      const page=await pdf.getPage(p);
+      const content=await page.getTextContent();
+      out.push(content.items.map(i=>i.str).join(" "));
+    }
+    $("pdfText").value=out.join("\n\n");
+    $("pdfMsg").textContent=`Extracted text from ${pdf.numPages} page${pdf.numPages===1?"":"s"}.`;
+  }catch(e){$("pdfMsg").textContent="Could not read PDF: "+e.message;}
+};
+
+$("clearPdf").onclick=()=>{
+  $("pdfFile").value="";$("pdfText").value="";$("pdfMsg").textContent="";
+};
+
+$("importPdfText").onclick=async()=>{
+  if(!user){$("pdfMsg").textContent="Please sign in first.";return;}
+  const lines=$("pdfText").value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  let count=0;
+  for(const line of lines){
+    const m=line.match(/^(.*?)(?:\s+)(\d+(?:[+\s]\d+)*)$/);
+    const name=(m?m[1]:line).trim();
+    const quantity=m?m[2].replace(/\s+/g,""):"";
+    if(!name)continue;
+    const existing=items.find(x=>String(x.name||"").trim().toLowerCase()===name.toLowerCase());
+    if(existing){
+      const nums=(String(existing.quantity||"").match(/\d+(?:\.\d+)?/g)||[]).map(Number);
+      const oldTotal=nums.reduce((a,b)=>a+b,0);
+      const addNums=(quantity.match(/\d+(?:\.\d+)?/g)||[]).map(Number);
+      const addTotal=addNums.reduce((a,b)=>a+b,0);
+      await updateDoc(doc(db,"users",user.uid,"items",existing.id),{quantity:String(oldTotal+addTotal),status:"pending"});
+    }else{
+      await addDoc(collection(db,"users",user.uid,"items"),{name,quantity,status:"pending",purchasedQty:0,createdAt:serverTimestamp()});
+    }
+    count++;
+  }
+  $("pdfMsg").textContent=`Imported ${count} item${count===1?"":"s"}. Existing items were increased instead of duplicated.`;
 };
 document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
   filter=b.dataset.filter;
@@ -110,80 +180,18 @@ document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{
 });
 function render(){
   const list=$("list"); list.innerHTML="";
-
-  const shown=items
-    .filter(x=>{
-      if(filter==="all") return true;
-      if(filter==="purchased") return x.status==="purchased";
-      if(filter==="pending") return x.status==="pending" || x.status==="partial";
-      return false;
-    })
-    .sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),undefined,{sensitivity:"base"}));
-
+  const shown=items.filter(x=>filter==="all" || x.status===filter);
   if(!shown.length){list.innerHTML='<p class="small">No items here yet.</p>';return}
-
   shown.forEach(x=>{
-    const el=document.createElement("div");
-    el.className="item "+(x.status==="purchased"?"done":"");
-
-    const name=document.createElement("div");
-    name.className="item-name";
-    name.textContent=x.name;
-
-    const total=parseInt(x.quantity,10);
-    const validTotal=Number.isFinite(total) && total>=0;
-    const rawBought=Number(x.purchasedQty);
-    const bought=validTotal ? Math.max(0,Math.min(Number.isFinite(rawBought)?rawBought:0,total)) : 0;
-    const pending=validTotal ? Math.max(total-bought,0) : 0;
-
-    const qty=document.createElement("div");
-    qty.className="item-qty";
-    qty.textContent=validTotal ? String(total) : (x.quantity || "");
-
-    const actions=document.createElement("div");
-    actions.className="item-actions";
-
-    if(validTotal && x.status!=="purchased"){
-      const input=document.createElement("input");
-      input.className="purchase-input";
-      input.type="number";
-      input.min="0";
-      input.max=String(total);
-      input.value=String(bought);
-      input.setAttribute("aria-label","Purchased quantity");
-
-      const update=document.createElement("button");
-      update.className="primary compact-btn";
-      update.textContent="Update";
-      update.onclick=async()=>{
-        const next=Math.max(0,Math.min(parseInt(input.value,10)||0,total));
-        await updateDoc(doc(db,"users",user.uid,"items",x.id),{
-          purchasedQty:next,
-          status:next>=total ? "purchased" : "pending"
-        });
-      };
-
-      actions.append(input,update);
-
-      const status=document.createElement("span");
-      status.className="status";
-      status.textContent=`Pending: ${pending}`;
-      actions.appendChild(status);
-    } else if(validTotal){
-      const status=document.createElement("span");
-      status.className="status purchased";
-      status.textContent="Purchased";
-      actions.appendChild(status);
-    }
-
-    const del=document.createElement("button");
-    del.className="danger compact-btn";
-    del.textContent="Delete";
+    const el=document.createElement("div"); el.className="item "+(x.status==="purchased"?"done":"");
+    const check=document.createElement("input"); check.type="checkbox"; check.checked=x.status==="purchased";
+    check.onchange=()=>updateDoc(doc(db,"users",user.uid,"items",x.id),{status:check.checked?"purchased":"pending"});
+    const text=document.createElement("div"); text.className="text";
+    const strong=document.createElement("strong"); strong.textContent=x.name; text.appendChild(strong);
+    if(x.quantity){const q=document.createElement("div");q.className="small";q.textContent="Qty: "+x.quantity;text.appendChild(q)}
+    const del=document.createElement("button");del.className="danger";del.textContent="Delete";
     del.onclick=()=>deleteDoc(doc(db,"users",user.uid,"items",x.id));
-    actions.appendChild(del);
-
-    el.append(name,qty,actions);
-    list.appendChild(el);
+    el.append(check,text,del);list.appendChild(el);
   });
 }
 </script>

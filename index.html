@@ -26,12 +26,12 @@ button{cursor:pointer;background:#fff}
 .tools{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .tool{padding:16px;border-radius:16px}
 .manual{background:#eef6ff}
-.pdf{background:#eefbf2}
+.paste{background:#eefbf2}
 .filters{display:flex;gap:8px;flex-wrap:wrap}
 .filters button.active{background:#172033;color:#fff}
 .search{flex:1;min-width:180px}
 .table{overflow:auto}
-.item{display:grid;grid-template-columns:minmax(180px,1.7fr) 110px 125px 110px 210px;align-items:center;gap:10px;padding:11px 8px;border-bottom:1px solid #eee}
+.item{display:grid;grid-template-columns:minmax(170px,1.5fr) 85px 105px 105px 120px 100px 190px;align-items:center;gap:10px;padding:11px 8px;border-bottom:1px solid #eee}
 .item.head{font-weight:700;background:#f8fafc;border-radius:12px}
 .item:last-child{border-bottom:0}
 .emoji{font-size:22px;margin-right:7px}
@@ -42,12 +42,15 @@ button{cursor:pointer;background:#fff}
 .actions button{padding:9px 10px}
 .success{background:#e9f8ef;border-color:#b7e4c7}
 .danger{color:#b42318}
-.grand{background:#eaf8ef;text-align:center;font-size:19px;font-weight:700}
+.subtotal{font-weight:800;text-align:center;padding:8px 10px;border-radius:10px;background:#eaf8ef;color:#166534}
+.price-input{width:100%;min-width:80px}
+textarea{width:100%;min-height:160px;resize:vertical;font:inherit;border-radius:12px;padding:12px;border:1px solid #d0d5dd;background:#fff}
+.delete-all{background:#ef4444;color:#fff;border-color:#ef4444;font-weight:750}
 .drop{border:2px dashed #9fb4a4;border-radius:14px;padding:22px;text-align:center}
 @media(max-width:800px){
  .summary{grid-template-columns:repeat(2,1fr)}
  .tools{grid-template-columns:1fr}
- .item{grid-template-columns:1.5fr 80px 105px 85px}
+ .item{grid-template-columns:1.4fr 70px 90px 90px}
  .item .actions{grid-column:1/-1;justify-content:flex-start}
  .item.head{display:none}
 }
@@ -76,23 +79,23 @@ button{cursor:pointer;background:#fff}
         <div class="row">
           <input id="name" placeholder="Item name (e.g. Tomato)" autocomplete="off">
           <input id="qty" placeholder="Quantity" type="number" min="1" step="1" style="max-width:140px">
+          <input id="price" placeholder="Price each" type="number" min="0" step="0.01" style="max-width:140px">
           <button id="add" class="primary">＋ Add Item</button>
         </div>
         <p class="small">If the item already exists, its quantity is increased instead of creating a duplicate.</p>
       </div>
 
-      <div class="card tool pdf">
-        <h2>📄 Upload from PDF</h2>
-        <p class="small">Upload a shopping/produce PDF. Items and quantities are imported and combined with existing items.</p>
-        <div class="drop">
-          <input id="pdfFile" type="file" accept="application/pdf">
-          <div id="pdfStatus" class="small">Choose a PDF file</div>
-        </div>
-        <button id="importPdf" class="primary" style="margin-top:10px" disabled>Import PDF to List</button>
+      <div class="card tool paste">
+        <h2>📋 Paste Text</h2>
+        <p class="small">Paste one item per line. Examples: <b>Tomato 3</b> or <b>Tomato 3 2.50</b> (item, quantity, optional price each).</p>
+        <textarea id="pasteText" placeholder="Tomato 3&#10;Banana 6 0.30&#10;Milk 2 1.50"></textarea>
+        <button id="importText" class="primary" style="margin-top:10px">Add Pasted Text to List</button>
       </div>
     </div>
 
     <div class="card"><div class="small">🌙 The shopping list resets automatically after midnight.</div></div>
+
+    <div class="card"><button id="clearToday" class="delete-all">🗑️ Delete All List</button></div>
 
     <div class="card summary">
       <div class="stat">Total Items (Names)<b id="totalItems">0</b></div>
@@ -118,12 +121,10 @@ button{cursor:pointer;background:#fff}
 
     <div class="card table">
       <div class="item head">
-        <div>Item</div><div class="qty">Quantity</div><div>Purchased</div><div>Remaining</div><div>Actions</div>
+        <div>Item</div><div class="qty">Qty</div><div>Price Each</div><div>Purchased</div><div>Remaining</div><div>Sub Total</div><div>Actions</div>
       </div>
       <div id="list"></div>
     </div>
-
-    <div class="card grand">🧮 Grand Total Quantity: <span id="grandTotal">0</span></div>
   </div>
 </div>
 
@@ -131,8 +132,6 @@ button{cursor:pointer;background:#fff}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
-import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
-pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
 
 const firebaseConfig={
  apiKey:"AIzaSyDl3SiPGZmBuXbn_BussDlQLC3h2Xly5aY",
@@ -144,7 +143,7 @@ const firebaseConfig={
  measurementId:"G-QDGQ26LX5H"
 };
 const fb=initializeApp(firebaseConfig),auth=getAuth(fb),db=getFirestore(fb),provider=new GoogleAuthProvider();
-let user=null,items=[],filter="all",stop=null,pdfReady=false;
+let user=null,items=[],filter="all",stop=null;
 
 const $=id=>document.getElementById(id);
 const emojiFor=name=>{
@@ -180,6 +179,11 @@ const emojiFor=name=>{
 function message(t){$("msg").textContent=t||""}
 function num(v){const m=String(v??"").match(/-?\\d+(?:\\.\\d+)?/);return m?Number(m[0]):0}
 function qtyText(v){return String(v??"").trim()||"0"}
+function qtyValue(v){
+ const parts=String(v??"").split("+").map(x=>Number(x.trim())).filter(Number.isFinite);
+ return parts.length?parts.reduce((a,b)=>a+b,0):num(v);
+}
+function money(v){return "£"+Number(v||0).toFixed(2)}
 
 $("login").onclick=async()=>{message("");try{await signInWithPopup(auth,provider)}catch(e){if(e.code==="auth/popup-blocked"||e.code==="auth/cancelled-popup-request")await signInWithRedirect(auth,provider);else message("Sign-in error: "+e.message)}};
 $("logout").onclick=()=>signOut(auth);
@@ -210,27 +214,33 @@ function listen(){
  },e=>message("Database error: "+e.message));
 }
 function existing(name){return items.find(x=>x.name.trim().toLowerCase()===name.trim().toLowerCase())}
-async function addOrIncrease(name,quantity){
+async function addOrIncrease(name,quantity,price=null){
  if(!user||!name)return;
- const q=Math.max(0,num(quantity));
+ const q=Math.max(0,qtyValue(quantity));
  if(!q)return;
+ const p=price===null||price===""?null:Math.max(0,num(price));
  const old=existing(name);
- if(old) await updateDoc(doc(db,"users",user.uid,"items",old.id),{quantity:num(old.quantity)+q,status:"pending"});
- else await addDoc(collection(db,"users",user.uid,"items"),{name:name.trim(),quantity:q,purchased:0,status:"pending",createdAt:serverTimestamp()});
+ if(old){
+   const data={quantity:qtyValue(old.quantity)+q,status:"pending"};
+   if(p!==null)data.price=p;
+   await updateDoc(doc(db,"users",user.uid,"items",old.id),data);
+ } else {
+   await addDoc(collection(db,"users",user.uid,"items"),{name:name.trim(),quantity:q,price:p??0,purchased:0,status:"pending",createdAt:serverTimestamp()});
+ }
 }
-$("add").onclick=async()=>{await addOrIncrease($("name").value,$("qty").value);$("name").value="";$("qty").value=""};
+$("add").onclick=async()=>{await addOrIncrease($("name").value,$("qty").value,$("price").value);$("name").value="";$("qty").value="";$("price").value=""};
 
 document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));render()});
 $("search").oninput=render;$("sort").onchange=render;
 
 async function setPurchased(x,val){
- const total=num(x.quantity),p=Math.max(0,Math.min(total,num(val)));
+ const total=qtyValue(x.quantity),p=Math.max(0,Math.min(total,num(val)));
  await updateDoc(doc(db,"users",user.uid,"items",x.id),{purchased:p,status:p>=total?"purchased":"pending"});
 }
 async function addQty(x){
  const extra=prompt("How many more to add?", "1"); if(extra===null)return;
  const q=num(extra);if(q<=0)return;
- await updateDoc(doc(db,"users",user.uid,"items",x.id),{quantity:num(x.quantity)+q,status:"pending"});
+ await updateDoc(doc(db,"users",user.uid,"items",x.id),{quantity:qtyValue(x.quantity)+q,status:"pending"});
 }
 function render(){
  const list=$("list");list.innerHTML="";
@@ -239,21 +249,24 @@ function render(){
  if(s)shown=shown.filter(x=>x.name.toLowerCase().includes(s));
  shown.sort((a,b)=>{const c=a.name.localeCompare(b.name,undefined,{sensitivity:"base"});return $("sort").value==="az"?c:-c});
  let total=0,pending=0,purchased=0;
- items.forEach(x=>{total+=num(x.quantity);if(x.status==="purchased")purchased++;else pending++});
- $("totalItems").textContent=items.length;$("totalQty").textContent=total;$("grandTotal").textContent=total;$("pendingItems").textContent=pending;$("purchasedItems").textContent=purchased;
+ items.forEach(x=>{total+=qtyValue(x.quantity);if(x.status==="purchased")purchased++;else pending++});
+ $("totalItems").textContent=items.length;$("totalQty").textContent=total;$("pendingItems").textContent=pending;$("purchasedItems").textContent=purchased;
  if(!shown.length){list.innerHTML='<p class="small">No items here yet.</p>';return}
  shown.forEach(x=>{
-   const totalQ=num(x.quantity),p=Math.max(0,Math.min(totalQ,num(x.purchased))),rem=Math.max(0,totalQ-p);
+   const totalQ=qtyValue(x.quantity),p=Math.max(0,Math.min(totalQ,num(x.purchased))),rem=Math.max(0,totalQ-p);
    const el=document.createElement("div");el.className="item";
    const name=document.createElement("div");name.innerHTML=`<span class="emoji">${emojiFor(x.name)}</span><strong></strong>`;name.querySelector("strong").textContent=x.name;
    const q=document.createElement("div");q.className="qty";q.textContent=qtyText(x.quantity);
+   const price=document.createElement("input");price.className="price-input";price.type="number";price.min="0";price.step="0.01";price.value=Number(x.price||0);
+   price.onchange=()=>updateDoc(doc(db,"users",user.uid,"items",x.id),{price:Math.max(0,num(price.value))});
    const pi=document.createElement("input");pi.className="purchased-input";pi.type="number";pi.min="0";pi.max=String(totalQ);pi.value=p;
    const r=document.createElement("div");r.className="remaining";r.textContent=rem;
+   const sub=document.createElement("div");sub.className="subtotal";sub.textContent=money(totalQ*Number(x.price||0));
    const actions=document.createElement("div");actions.className="actions";
    const up=document.createElement("button");up.className="success";up.textContent="✓";up.title="Update purchased";up.onclick=()=>setPurchased(x,pi.value);
    const del=document.createElement("button");del.className="danger";del.textContent="🗑";del.onclick=()=>deleteDoc(doc(db,"users",user.uid,"items",x.id));
-   const add=document.createElement("button");add.textContent="＋ Add Qty";add.onclick=()=>addQty(x);
-   actions.append(up,del,add);el.append(name,q,pi,r,actions);list.appendChild(el);
+   const add=document.createElement("button");add.textContent="＋ Qty";add.onclick=()=>addQty(x);
+   actions.append(up,del,add);el.append(name,q,price,pi,r,sub,actions);list.appendChild(el);
  });
 }
 
@@ -269,21 +282,20 @@ $("clearToday").onclick=async()=>{
  }
 };
 
-$("pdfFile").onchange=()=>{pdfReady=!!$("pdfFile").files[0];$("pdfStatus").textContent=pdfReady?$("pdfFile").files[0].name:"Choose a PDF file";$("importPdf").disabled=!pdfReady};
-$("importPdf").onclick=async()=>{
- const file=$("pdfFile").files[0];if(!file||!user)return;
- $("importPdf").disabled=true;$("pdfStatus").textContent="Reading PDF…";
- try{
-   const data=await file.arrayBuffer(),pdf=await pdfjsLib.getDocument({data}).promise;let text="";
-   for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p),c=await page.getTextContent();text+=c.items.map(i=>i.str).join(" ")+"\\n"}
-   const lines=text.split(/\\n+/).map(x=>x.trim()).filter(Boolean);let added=0;
-   for(const line of lines){
-     const m=line.match(/^(.+?)\\s+(\\d+(?:\\s*\\+\\s*\\d+)*)\\s*$/);if(!m)continue;
-     const q=m[2].split("+").reduce((a,v)=>a+Number(v.trim()),0);if(q>0){await addOrIncrease(m[1],q);added++}
-   }
-   $("pdfStatus").textContent=`Imported ${added} item lines`;message("PDF import complete.");
- }catch(e){$("pdfStatus").textContent="PDF import failed";message("PDF error: "+e.message)}
- $("importPdf").disabled=false;
+$("importText").onclick=async()=>{
+ const raw=$("pasteText").value.trim();
+ if(!raw||!user){message("Paste your shopping list text first.");return;}
+ const lines=raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ let added=0;
+ for(const line of lines){
+   const cleaned=line.replace(/^[•*\-\s]+/,"").trim();
+   const m=cleaned.match(/^(.+?)\s*[-:,\t]?\s+(\d+(?:\s*\+\s*\d+)*)(?:\s+(?:£|₹|\$)?\s*(\d+(?:\.\d{1,2})?))?\s*$/);
+   if(!m)continue;
+   await addOrIncrease(m[1].trim(),m[2],m[3]??null);
+   added++;
+ }
+ message(added?`Added ${added} item line${added===1?"":"s"} from pasted text.`:"No valid item lines found.");
+ if(added)$("pasteText").value="";
 };
 </script>
 </body>

@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My Shopping List</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f5f7fb;color:#172033}
+.wrap{max-width:1050px;margin:auto;padding:18px}
+.card{background:#fff;border-radius:18px;padding:18px;box-shadow:0 8px 28px #00000012;margin-bottom:14px}
+h1{margin:0 0 6px;font-size:28px}
+p{color:#667085}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+input,button{font:inherit;border-radius:12px;padding:12px;border:1px solid #d0d5dd}
+input{min-width:120px}
+button{cursor:pointer;background:#fff}
+.primary{background:#172033;color:#fff;border-color:#172033}
+.hidden{display:none!important}
+.small{font-size:13px;color:#667085}
+#msg{font-size:14px}
+.top{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.stat{padding:15px;border-radius:16px;background:#f8fafc}
+.stat b{display:block;font-size:24px;margin-top:3px}
+.stat.pending-stat{background:#fff0f0;border:1px solid #fecaca;color:#b42318}
+.stat.pending-stat b{color:#dc2626}
+.item.done-faded{opacity:.42;background:#f8fafc}
+.item.done-faded:hover{opacity:.62}
+.tools{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.tool{padding:16px;border-radius:16px}
+.manual{background:#eef6ff}
+.paste{background:#eefbf2}
+.filters{display:flex;gap:8px;flex-wrap:wrap}
+.filters button.active{background:#172033;color:#fff}
+.search{flex:1;min-width:180px}
+.table{overflow:auto}
+.item{display:grid;grid-template-columns:minmax(180px,1.7fr) 90px 120px 120px 220px;align-items:center;gap:10px;padding:11px 8px;border-bottom:1px solid #eee}
+.item.head{font-weight:700;background:#f8fafc;border-radius:12px}
+.item:last-child{border-bottom:0}
+.emoji{font-size:22px;margin-right:7px}
+.qty{text-align:center;font-weight:650}
+.purchased-input{width:100%}
+.remaining{font-weight:700;text-align:center;padding:7px 10px;border-radius:9px;background:#fff0f0;color:#b42318}
+.actions{display:flex;gap:6px;justify-content:flex-end}
+.actions button{padding:9px 10px}
+.success{background:#e9f8ef;border-color:#b7e4c7}
+.danger{color:#b42318}
+textarea{width:100%;min-height:160px;resize:vertical;font:inherit;border-radius:12px;padding:12px;border:1px solid #d0d5dd;background:#fff}
+.delete-all{background:#ef4444;color:#fff;border-color:#ef4444;font-weight:750}
+.drop{border:2px dashed #9fb4a4;border-radius:14px;padding:22px;text-align:center}
+@media(max-width:800px){
+ .summary{grid-template-columns:repeat(2,1fr)}
+ .tools{grid-template-columns:1fr}
+ .item{grid-template-columns:1.4fr 70px 90px 90px}
+ .item .actions{grid-column:1/-1;justify-content:flex-start}
+ .item.head{display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="top">
+      <div>
+        <h1>🛒 My Shopping List</h1>
+        <p id="userText">Sign in to keep your list synced across devices.</p>
+      </div>
+      <div>
+        <button id="login" class="primary">Continue with Google</button>
+        <button id="logout" class="hidden">Sign out</button>
+      </div>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="tools">
+      <div class="card tool manual">
+        <h2>✏️ Add Item Manually</h2>
+        <div class="row">
+          <input id="name" placeholder="Item name (e.g. Tomato)" autocomplete="off">
+          <input id="qty" placeholder="Quantity" type="number" min="1" step="1" style="max-width:140px">
+          <button id="add" class="primary">＋ Add Item</button>
+        </div>
+        <p class="small">If the item already exists, its quantity is increased instead of creating a duplicate.</p>
+      </div>
+
+      <div class="card tool paste">
+        <h2>📋 Paste Text</h2>
+        <p class="small">Paste one item per line. Example: <b>Tomato 3</b>. You can also use quantities like <b>1+1+2</b>.</p>
+        <textarea id="pasteText" placeholder="Tomato 3&#10;Banana 6&#10;Milk 1+1"></textarea>
+        <button id="importText" class="primary" style="margin-top:10px">Add Pasted Text to List</button>
+      </div>
+    </div>
+
+    <div class="card"><div class="small">🌙 The shopping list resets automatically after midnight.</div></div>
+
+    <div class="card"><button id="clearToday" class="delete-all">🗑️ Delete Entire List</button></div>
+
+    <div class="card summary">
+      <div class="stat pending-stat">Pending Items<b id="pendingItems">0</b></div>
+      <div class="stat">Total Items (Names)<b id="totalItems">0</b></div>
+      <div class="stat">Total Quantity (All Items)<b id="totalQty">0</b></div>
+      <div class="stat">Purchased Items<b id="purchasedItems">0</b></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="align-items:center">
+        <div class="filters">
+          <button data-filter="all" class="active">All</button>
+          <button data-filter="pending">Pending</button>
+          <button data-filter="purchased">Purchased</button>
+        </div>
+        <input id="search" class="search" placeholder="Search items...">
+        <select id="sort" style="padding:12px;border:1px solid #d0d5dd;border-radius:12px">
+          <option value="az">Sort A → Z</option>
+          <option value="za">Sort Z → A</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card table">
+      <div class="item head">
+        <div>Item</div><div class="qty">Quantity</div><div>Done Qty</div><div>Remaining</div><div>Actions</div>
+      </div>
+      <div id="list"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+const firebaseConfig={
+ apiKey:"AIzaSyDl3SiPGZmBuXbn_BussDlQLC3h2Xly5aY",
+ authDomain:"myshoppinglist-fa482.firebaseapp.com",
+ projectId:"myshoppinglist-fa482",
+ storageBucket:"myshoppinglist-fa482.firebasestorage.app",
+ messagingSenderId:"1029848940557",
+ appId:"1:1029848940557:web:0b59a54f290a449e291544",
+ measurementId:"G-QDGQ26LX5H"
+};
+const fb=initializeApp(firebaseConfig),auth=getAuth(fb),db=getFirestore(fb),provider=new GoogleAuthProvider();
+let user=null,items=[],filter="all",stop=null;
+
+const $=id=>document.getElementById(id);
+const emojiFor=name=>{
+ const n=name.toLowerCase();
+ if(/avocado/.test(n))return"🥑";
+ if(/apple|custard apple/.test(n))return"🍎";
+ if(/banana|plantain|matoki/.test(n))return"🍌";
+ if(/mango/.test(n))return"🥭";
+ if(/orange|clementine/.test(n))return"🍊";
+ if(/lemon|lime|keylime/.test(n))return"🍋";
+ if(/watermelon/.test(n))return"🍉";
+ if(/pineapple/.test(n))return"🍍";
+ if(/coconut/.test(n))return"🥥";
+ if(/grape/.test(n))return"🍇";
+ if(/lychee|guava|papaya|passion|soursop|kaki|fig|date|tamarind|breadfruit|fruit/.test(n))return"🍈";
+ if(/carrot/.test(n))return"🥕";
+ if(/corn/.test(n))return"🌽";
+ if(/cucumber/.test(n))return"🥒";
+ if(/aub|eggplant|ravaya|garden egg/.test(n))return"🍆";
+ if(/pepper|chilli|chili/.test(n))return"🌶️";
+ if(/tom|tomato/.test(n))return"🍅";
+ if(/onion|garlic/.test(n))return"🧅";
+ if(/pot|yam|cassava|cocoyam|dasheen|eddoe/.test(n))return"🥔";
+ if(/beetroot|mooli|radish/.test(n))return"🫜";
+ if(/cabbage|spinach|lettuce|coriander|parsley|mint|thyme|dill|methi|leek|spring onion|haldi|ginger|okra|beans|guwar|papdi|karela|turia|chow chow|drumstick|pumpkin|greens?/.test(n))return"🥬";
+ if(/fish|cod|saltfish|mackerel/.test(n))return"🐟";
+ if(/paneer/.test(n))return"🧀";
+ if(/peanut/.test(n))return"🥜";
+ if(/sprout/.test(n))return"🌱";
+ if(/sugarcane/.test(n))return"🎋";
+ return"🛒";
+};
+function message(t){$("msg").textContent=t||""}
+function num(v){const m=String(v??"").match(/-?\d+(?:\.\d+)?/);return m?Number(m[0]):0}
+function qtyText(v){return String(v??"").trim()||"0"}
+function qtyValue(v){
+ const parts=String(v??"").split("+").map(x=>Number(x.trim())).filter(Number.isFinite);
+ return parts.length?parts.reduce((a,b)=>a+b,0):num(v);
+}
+
+$("login").onclick=async()=>{message("");try{await signInWithPopup(auth,provider)}catch(e){if(e.code==="auth/popup-blocked"||e.code==="auth/cancelled-popup-request")await signInWithRedirect(auth,provider);else message("Sign-in error: "+e.message)}};
+$("logout").onclick=()=>signOut(auth);
+
+onAuthStateChanged(auth,u=>{
+ user=u;$("login").classList.toggle("hidden",!!u);$("logout").classList.toggle("hidden",!u);$("app").classList.toggle("hidden",!u);
+ $("userText").textContent=u?`Signed in as ${u.displayName||u.email}`:"Sign in to keep your list synced across devices.";
+ if(stop){stop();stop=null} if(u)listen();else{items=[];render()}
+});
+
+async function deleteExpiredItems(currentItems){
+ const now=new Date();
+ const todayStart=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+ const expired=currentItems.filter(x=>{
+   const t=x.createdAt?.toMillis?.();
+   return t && t<todayStart;
+ });
+ if(expired.length){
+   await Promise.all(expired.map(x=>deleteDoc(doc(db,"users",user.uid,"items",x.id))));
+ }
+}
+function listen(){
+ const ref=collection(db,"users",user.uid,"items"),q=query(ref,orderBy("createdAt","desc"));
+ stop=onSnapshot(q,async s=>{
+   items=s.docs.map(d=>({id:d.id,...d.data()}));
+   await deleteExpiredItems(items);
+   render();
+ },e=>message("Database error: "+e.message));
+}
+function existing(name){return items.find(x=>x.name.trim().toLowerCase()===name.trim().toLowerCase())}
+async function addOrIncrease(name,quantity){
+ if(!user||!name)return;
+ const q=Math.max(0,qtyValue(quantity));
+ if(!q)return;
+ const old=existing(name);
+ if(old){
+   await updateDoc(doc(db,"users",user.uid,"items",old.id),{
+     quantity:qtyValue(old.quantity)+q,
+     status:"pending"
+   });
+ } else {
+   await addDoc(collection(db,"users",user.uid,"items"),{
+     name:name.trim(),quantity:q,purchased:0,status:"pending",createdAt:serverTimestamp()
+   });
+ }
+}
+$("add").onclick=async()=>{await addOrIncrease($("name").value,$("qty").value);$("name").value="";$("qty").value=""};
+
+document.querySelectorAll("[data-filter]").forEach(b=>b.onclick=()=>{filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));render()});
+$("search").oninput=render;$("sort").onchange=render;
+
+async function setPurchased(x,val){
+ const total=Math.max(0,qtyValue(x.quantity));
+ const done=Math.max(0,Math.min(total,num(val)));
+ const status=(total>0 && done===total)?"purchased":"pending";
+ await updateDoc(doc(db,"users",user.uid,"items",x.id),{purchased:done,status});
+}
+async function addQty(x){
+ const extra=prompt("How many more to add?", "1"); if(extra===null)return;
+ const q=num(extra);if(q<=0)return;
+ await updateDoc(doc(db,"users",user.uid,"items",x.id),{quantity:qtyValue(x.quantity)+q,status:"pending"});
+}
+function render(){
+ const list=$("list");list.innerHTML="";
+ let shown=[...items].filter(x=>{
+   const tq=qtyValue(x.quantity), done=Math.max(0,Math.min(tq,num(x.purchased)));
+   const actualStatus=(tq>0 && done>=tq)?"purchased":"pending";
+   return filter==="all"||actualStatus===filter;
+ });
+ const s=$("search").value.trim().toLowerCase();
+ if(s)shown=shown.filter(x=>x.name.toLowerCase().includes(s));
+ shown.sort((a,b)=>{const c=a.name.localeCompare(b.name,undefined,{sensitivity:"base"});return $("sort").value==="az"?c:-c});
+ let total=0,pending=0,purchased=0;
+ items.forEach(x=>{
+   const tq=qtyValue(x.quantity), done=Math.max(0,Math.min(tq,num(x.purchased)));
+   total+=tq;
+   if(tq>0 && done>=tq)purchased++; else pending++;
+ });
+ $("totalItems").textContent=items.length;$("totalQty").textContent=total;$("pendingItems").textContent=pending;$("purchasedItems").textContent=purchased;
+ if(!shown.length){list.innerHTML='<p class="small">No items here yet.</p>';return}
+ shown.forEach(x=>{
+   const totalQ=qtyValue(x.quantity),p=Math.max(0,Math.min(totalQ,num(x.purchased))),rem=Math.max(0,totalQ-p);
+   const el=document.createElement("div");el.className="item";
+   const name=document.createElement("div");
+   const isDone=totalQ>0 && p===totalQ;
+    if(filter==="all" && isDone)el.classList.add("done-faded");
+   name.innerHTML=`<span class="emoji">${emojiFor(x.name)}</span><strong></strong><div class="small">${isDone?"Purchased":"Pending"}</div>`;
+   name.querySelector("strong").textContent=x.name;
+   const q=document.createElement("div");q.className="qty";q.textContent=qtyText(x.quantity);
+   const pi=document.createElement("input");pi.className="purchased-input";pi.type="number";pi.min="0";pi.max=String(totalQ);pi.value=p;
+   const r=document.createElement("div");r.className="remaining";r.textContent=rem;
+   const actions=document.createElement("div");actions.className="actions";
+   const save=document.createElement("button");save.className="success";save.textContent="✓ Save Done";save.title="Save completed quantity";
+   save.onclick=()=>setPurchased(x,pi.value);
+   const allDone=document.createElement("button");allDone.textContent="✓ All Done";allDone.onclick=()=>setPurchased(x,totalQ);
+   const add=document.createElement("button");add.textContent="＋ Qty";add.onclick=()=>addQty(x);
+   actions.append(save,allDone,add);el.append(name,q,pi,r,actions);list.appendChild(el);
+ });
+}
+
+$("clearToday").onclick=async()=>{
+ if(!user || !items.length){message("There is no list to delete.");return;}
+ const ok=confirm("Delete the ENTIRE shopping list? This cannot be undone.");
+ if(!ok)return;
+ try{
+   await Promise.all(items.map(x=>deleteDoc(doc(db,"users",user.uid,"items",x.id))));
+   message("Today’s shopping list has been deleted.");
+ }catch(e){
+   message("Delete error: "+e.message);
+ }
+};
+
+$("importText").onclick=async()=>{
+ const raw=$("pasteText").value.trim();
+ if(!raw||!user){message("Paste your shopping list text first.");return;}
+ const lines=raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ let added=0;
+ for(const line of lines){
+   const cleaned=line.replace(/^[•*\-\s]+/,"").trim();
+   const m=cleaned.match(/^(.+?)\s*[-:,\t]?\s+(\d+(?:\s*\+\s*\d+)*)\s*$/);
+   if(!m)continue;
+   await addOrIncrease(m[1].trim(),m[2]);
+   added++;
+ }
+ message(added?`Added ${added} item line${added===1?"":"s"} from pasted text.`:"No valid item lines found. Use one item per line, for example: Tomato 3");
+ if(added)$("pasteText").value="";
+};
+</script>
+</body>
+</html>

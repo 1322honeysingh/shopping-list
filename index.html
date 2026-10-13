@@ -23,10 +23,6 @@ button{cursor:pointer;background:#fff}
 .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .stat{padding:15px;border-radius:16px;background:#f8fafc}
 .stat b{display:block;font-size:24px;margin-top:3px}
-.stat.pending-stat{background:#fff0f0;border:1px solid #fecaca;color:#b42318}
-.stat.pending-stat b{color:#dc2626}
-.item.done-faded{opacity:.42;background:#f8fafc}
-.item.done-faded:hover{opacity:.62}
 .tools{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .tool{padding:16px;border-radius:16px}
 .manual{background:#eef6ff}
@@ -38,6 +34,7 @@ button{cursor:pointer;background:#fff}
 .item{display:grid;grid-template-columns:minmax(180px,1.7fr) 90px 120px 120px 220px;align-items:center;gap:10px;padding:11px 8px;border-bottom:1px solid #eee}
 .item.head{font-weight:700;background:#f8fafc;border-radius:12px}
 .item:last-child{border-bottom:0}
+.item.completed{opacity:.42}
 .emoji{font-size:22px;margin-right:7px}
 .qty{text-align:center;font-weight:650}
 .purchased-input{width:100%}
@@ -48,6 +45,9 @@ button{cursor:pointer;background:#fff}
 .danger{color:#b42318}
 textarea{width:100%;min-height:160px;resize:vertical;font:inherit;border-radius:12px;padding:12px;border:1px solid #d0d5dd;background:#fff}
 .delete-all{background:#ef4444;color:#fff;border-color:#ef4444;font-weight:750}
+.login-box{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+.login-box input{max-width:180px}
+@media(max-width:600px){.login-box{justify-content:flex-start}.login-box input{max-width:none;flex:1 1 140px}}
 .drop{border:2px dashed #9fb4a4;border-radius:14px;padding:22px;text-align:center}
 @media(max-width:800px){
  .summary{grid-template-columns:repeat(2,1fr)}
@@ -66,8 +66,12 @@ textarea{width:100%;min-height:160px;resize:vertical;font:inherit;border-radius:
         <h1>🛒 My Shopping List</h1>
         <p id="userText">Sign in to keep your list synced across devices.</p>
       </div>
+      <div class="login-box" id="loginBox">
+        <input id="username" placeholder="Username" autocomplete="username" value="ADMIN">
+        <input id="password" placeholder="Password" type="password" autocomplete="current-password">
+        <button id="login" class="primary">Sign in</button>
+      </div>
       <div>
-        <button id="login" class="primary">Continue with Google</button>
         <button id="logout" class="hidden">Sign out</button>
       </div>
     </div>
@@ -99,7 +103,7 @@ textarea{width:100%;min-height:160px;resize:vertical;font:inherit;border-radius:
     <div class="card"><button id="clearToday" class="delete-all">🗑️ Delete Entire List</button></div>
 
     <div class="card summary">
-      <div class="stat pending-stat">Pending Items<b id="pendingItems">0</b></div>
+      <div class="stat" style="background:#fff0f0;color:#b42318">Pending Items<b id="pendingItems">0</b></div>
       <div class="stat">Total Items (Names)<b id="totalItems">0</b></div>
       <div class="stat">Total Quantity (All Items)<b id="totalQty">0</b></div>
       <div class="stat">Purchased Items<b id="purchasedItems">0</b></div>
@@ -131,7 +135,7 @@ textarea{width:100%;min-height:160px;resize:vertical;font:inherit;border-radius:
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 const firebaseConfig={
@@ -143,7 +147,7 @@ const firebaseConfig={
  appId:"1:1029848940557:web:0b59a54f290a449e291544",
  measurementId:"G-QDGQ26LX5H"
 };
-const fb=initializeApp(firebaseConfig),auth=getAuth(fb),db=getFirestore(fb),provider=new GoogleAuthProvider();
+const fb=initializeApp(firebaseConfig),auth=getAuth(fb),db=getFirestore(fb);
 let user=null,items=[],filter="all",stop=null;
 
 const $=id=>document.getElementById(id);
@@ -185,7 +189,23 @@ function qtyValue(v){
  return parts.length?parts.reduce((a,b)=>a+b,0):num(v);
 }
 
-$("login").onclick=async()=>{message("");try{await signInWithPopup(auth,provider)}catch(e){if(e.code==="auth/popup-blocked"||e.code==="auth/cancelled-popup-request")await signInWithRedirect(auth,provider);else message("Sign-in error: "+e.message)}};
+const SHARED_USERNAME="ADMIN";
+const SHARED_EMAIL="admin@myshoppinglist.local";
+
+$("login").onclick=async()=>{
+  message("");
+  const username=$("username").value.trim().toUpperCase();
+  const password=$("password").value;
+  if(username!==SHARED_USERNAME){message("Invalid username or password.");return;}
+  if(!password){message("Enter your password.");return;}
+  try{
+    await signInWithEmailAndPassword(auth,SHARED_EMAIL,password);
+    $("password").value="";
+  }catch(e){
+    message("Invalid username or password.");
+  }
+};
+$("password").addEventListener("keydown",e=>{if(e.key==="Enter")$("login").click()});
 $("logout").onclick=()=>signOut(auth);
 
 onAuthStateChanged(auth,u=>{
@@ -269,8 +289,9 @@ function render(){
    const el=document.createElement("div");el.className="item";
    const name=document.createElement("div");
    const isDone=totalQ>0 && p===totalQ;
-    if(filter==="all" && isDone)el.classList.add("done-faded");
-   name.innerHTML=`<span class="emoji">${emojiFor(x.name)}</span><strong></strong><div class="small">${isDone?"Purchased":"Pending"}</div>`;
+   
+    if(filter==="all" && isDone)el.classList.add("completed");
+    name.innerHTML=`<span class="emoji">${emojiFor(x.name)}</span><strong></strong><div class="small">${isDone?"Purchased":"Pending"}</div>`;
    name.querySelector("strong").textContent=x.name;
    const q=document.createElement("div");q.className="qty";q.textContent=qtyText(x.quantity);
    const pi=document.createElement("input");pi.className="purchased-input";pi.type="number";pi.min="0";pi.max=String(totalQ);pi.value=p;
